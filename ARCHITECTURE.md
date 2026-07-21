@@ -256,6 +256,8 @@ Privacy-sensitive **writes and location tagging fail closed (off)** if FlagState
 
 ### 7.1 Capture → redact → vault
 
+> **Expanded and made authoritative by §19 (Low-bandwidth media & upload resilience).** §19 fixes the exact client step order (ingest → crash-quarantine → downscale → bake redaction → **human confirm on the final bytes** → strip derivative metadata → hash derivative → hash original → seal → commit both), the three-phase priority upload (register + hashes first, small derivative next, sealed original deferred/resumable), the `original_status` custody state (a registered hash is a weaker claim than vaulted bytes), and the honest video posture (redaction-needed video ships sealed + poster-still only, no on-device face-cover). Build from §19.
+
 `capture → SHA-256 + minimal Ed25519 provenance (ProofMode-style, deliberately minimized sensor metadata) → redaction → two separated outputs.` **Manual solid-fill redaction (user drags boxes over faces/plates on a canvas) + mandatory human before/after confirm is the guaranteed, always-available control** — zero ML download, works on 2G. On-device face/plate ML is an **optional, capability-gated, lazy-loaded assist**, never on first paint, never a safety guarantee (it misses on exactly the low-end devices high-risk users carry). Redaction uncertainty **fails closed to vault-only.** The public redacted derivative is the **only** server-readable output; the unredacted original is sealed client-side and never server-readable.
 
 **Uploads:** R2 **multipart with per-part short-TTL presigned URLs**, client-side resumable chunking, part URLs re-minted on demand. This reconciles the two locked constraints that otherwise collide — "minutes-short expiry for seizure safety" vs "multi-MB evidence over 2G/onion" — a single long-lived URL would expire mid-upload.
@@ -286,6 +288,86 @@ Append-only hash chain in a DO (`H_i = SHA256(H_{i-1} ‖ payloadHash_i)`) recor
 - Hindi/other-language safety-critical verdicts are **advisory only → human review** (matches locked i18n decision).
 
 **Anti-incitement / anti-doxxing tripwire:** on a violence-intent or **private-individual PII** hit → immediate quarantine → brief human-confirm hold → **short-purge the payload** (retaining violence-intent + PII is UAPA/BNS-radioactive), keeping only a minimal non-content audit row `{opaque_id, category_code, action, ts, model_version, reviewer_ref}`. Radioactive payloads **cannot be retained-during-appeal** (gone by design) — appeals run off the audit record. The tripwire targets **private-individual** data only; **official-capacity accountability naming is out of scope** and routes to Domain-10's separate m-of-n gate, so the classifier cannot be weaponized to suppress legitimate misconduct records. Coordinated mass-flagging is itself a CIB input → trips into human review, not auto-suppression.
+
+### 7.5 Client-side media pipeline (pre-seal / pre-upload) — the on-device path each capture takes before it leaves the phone
+
+This is the ordered, integrity-safe on-device path that turns one raw capture into the **two outputs of §7.1**: (a) a small public **REDACTED DERIVATIVE** for `public-media` (server-readable) and (b) a sealed pristine **ORIGINAL** for `evidence-vault` (client-encrypted, platform-unreadable). It runs on a 1–2 GB-RAM Android WebView over 2G/onion and is built to three non-negotiables: **integrity** (the derivative pipeline never mutates the pristine original's bytes or hash), **confidentiality** (the Worker/edge only ever sees ciphertext or an already-redacted derivative — redaction happens *here*, never server-side), and **never-block** (nothing waits on an upload; everything queues into the encrypted outbox and sends opportunistically, §7.1/§9.3). It adds **zero wasm to first paint**: hashing is WebCrypto, image work is built-in browser APIs (`createImageBitmap`/`OffscreenCanvas`/`convertToBlob`), the seal cipher is a few-KB **pure-JS XChaCha20-Poly1305** (`@noble/ciphers`, chunked AEAD — no wasm; libsodium `secretstream` is the alternative if adopted), and the optional Opus encoder is **lazy-loaded only when the evidence/audio flow opens**, never on cold start.
+
+**Two invariants fix the order.** (i) A public derivative can **never** be emitted without passing irreversible solid-fill redaction **+ human before/after confirm**; redaction uncertainty or abort **fails closed to vault-only** (original sealed, *no* public derivative). (ii) The pristine original is **always** hashed and sealed — the flow cannot terminate `ready` with a queued derivative but an unsealed original. The two artifacts become two independent, `original_sha256`-linked outbox items whose uploads are timing-decorrelated (§9.3).
+
+**Canonical order — IMAGES** (each `→` is a fail-closed gate; a capture cannot skip forward):
+
+`ingest raw → quarantine copy → strip metadata (into the derivative branch only) → solid-fill redact + human before/after confirm → downscale + re-encode derivative → hash the derivative → hash the pristine original → seal the original → commit (both queued) → release in-memory buffers`
+
+1. **Ingest raw** (`<input capture>` / `getUserMedia` → `Blob`/`File`). The pristine bytes are held as an **immutable buffer**; every later step operates on decoded *copies* (`createImageBitmap` mints a new bitmap) — the original `Blob` is never written through. *Main thread* (file/permission UI only).
+2. **Quarantine copy** — the raw blob is written **encrypted** to a short-lived `capture-quarantine` IndexedDB store for crash-safety (a potato phone dying mid-redaction must not lose evidence), cleared at commit. This is durability, not the vault artifact; it does **not** reorder the commit. *Web Worker.*
+3. **Strip metadata** — applies to the **derivative branch only**. Re-encoding through a canvas inherently drops EXIF/GPS/maker-notes; we never carry capture metadata into the public output. The **original keeps its metadata intact** — camera model, sensor timestamp and any embedded GPS are *chain-of-custody provenance* and are protected by the E2E seal, not by deletion (the platform can't read them anyway). *Web Worker.*
+4. **Solid-fill redact + human confirm** — the user drags opaque boxes over faces/plates/IDs on a visible canvas; boxes are **baked into pixels** (irreversible fill, never blur/mosaic, §18 wording). Mandatory **before/after** confirm. This step needs no codec and always works, even at OOM. Redaction runs against a *display-resolution working copy*; the confirmed box geometry is then re-applied to the full derivative render so what the user approved is exactly what ships. Canvas + pointer events on the *main thread*; the pixel bake + subsequent encode hand off to the *Worker*.
+5. **Downscale + re-encode derivative** — `createImageBitmap(blob,{resizeWidth,resizeQuality:'high'})` decodes-and-scales in one memory-frugal step → draw to `OffscreenCanvas` → `convertToBlob`. Codec pick is **capability- and CPU-budget-probed**, not fixed: **WebP q≈55–60 is the low-end default** (cheap encode, small, universal); **AVIF** only if a one-time probe shows the device encodes within a time budget (best ratio for 2G but heavy on weak CPUs); **JPEG q≈45** is the universal fallback. Client codec choice is **not load-bearing** — the archive's AVIF *master* is re-derived server-side from this already-redacted derivative (§16 Lever 2), so the client only needs "small + legible + travels." *Web Worker (OffscreenCanvas).*
+6. **Hash the derivative** → `derivative_sha256` (WebCrypto, streamed). Assert `derivative_sha256 ≠ original_sha256` — equality means re-encode was skipped; **fail closed** to redaction-review, never publish. *Worker.*
+7. **Hash the pristine original** → `original_sha256` over the exact untouched bytes; this is *the* integrity anchor (§16, §63 BSA) and is pinned into the Ed25519 provenance + custody ledger. Chunk/stream for multi-MB on low RAM. *Worker.*
+8. **Seal the original** — XChaCha20-Poly1305, **encrypted in R2-multipart-part-sized chunks** (per-chunk nonce = base‖counter, chunk index as AAD) so a resumed upload re-sends only the failed ciphertext part and we never hold 2× the file in RAM. Keys are off-platform (§5.4). *Worker.*
+9. **Commit** — only when *both* the sealed-original ciphertext and the human-confirmed redacted derivative exist in the outbox is the item `ready`; the quarantine copy and in-memory buffers are released. If redaction was aborted/uncertain → `vault-only` commit (sealed original queued, no derivative).
+
+**Adaptive quality by measured connection** — `navigator.connection.effectiveType` + `saveData` + `downlink`/`rtt` where present (Chromium/Android WebView), with a **measured-throughput fallback** (EWMA bytes/sec from the first multipart part or a tiny warmup, stored) for iOS/absent-API cases:
+
+| Link class (effectiveType / saveData / measured) | Derivative long-edge | Encoder | Byte target | Sealed original |
+|---|---|---|---|---|
+| `slow-2g`/`2g` or `saveData` | **1280 px** (legibility floor) | WebP q≈45 (AVIF q≈38 if probe-fast) | ≤120 KB | **deferred** — queued, sends on unmetered/next-open |
+| `3g` / ~measured 150 KB–1 MB/s | 1600 px | WebP q≈55 / AVIF q≈50 | ≤300 KB | deferred by default (Data-Saver) |
+| `4g`+ / measured >1 MB/s | 2048 px | AVIF q≈55 / WebP q≈60 | ≤600 KB | may send now if user opts (else deferred) |
+
+**Legibility is a hard floor, not a target.** The derivative must keep a **badge number / banner text / face-of-official** readable: long-edge **never below 1280 px**, quality **never below JPEG-q≈35 equivalent**. If the byte target and the legibility floor conflict, **legibility wins and the derivative simply defers** (queues) rather than degrading below evidentiary usefulness — we never ship an unreadable "public" copy to save a few KB.
+
+**VIDEO — honest, day-1.** The client does **not** transcode video and does **not** offer on-device face-cover (WebCodecs is patchy on the low-end devices high-risk users carry; per-frame cover in-browser is unreliable — promising it would be a safety lie). Day-1 the pipeline:
+- **Seals + defers the full original** (E2E, whole/untrimmed — its embedded metadata is protected by encryption, not surgery, so no client moov-atom rewrite is attempted).
+- **Generates one on-device poster/keyframe** — draw a chosen `<video>` frame to canvas → run it through the **exact image pipeline above** (strip → solid-fill redact + confirm → downscale → re-encode). This redacted still is the **only public video artifact day-1**.
+- **Trim** is recorded as in/out **markers in provenance**, applied only to the *server-side* derivative later — never cutting the sealed original's bytes. A privacy cut (excising a bystander segment) is a **derivative-side** operation; the full footage remains only in the user-held sealed vault.
+- **Full video transcode + face-cover is DEFERRED to server-side** (Images/Container, §16 Lever 2) operating **only on an already-redacted derivative or on nothing** — never on the sealed original (which the platform cannot read). Copy must say so plainly: *"The video's faces are NOT covered yet. It stays private and sealed until our team can prepare a safe-to-share version — only the still image you approved is shared now."*
+
+**AUDIO.** Original sealed + deferred. A **low-bitrate Opus derivative** (24–32 kbps mono) is produced **only if cheap**: at capture, prefer `MediaRecorder('audio/webm;codecs=opus', {audioBitsPerSecond})` directly; for imported audio, lazy-load a small Opus encoder and transcode, **falling back to keep-original-and-defer** (server/Container makes the Opus derivative) if decode/re-encode is too costly on the device. **No voice anonymization day-1** (pitch-shift/bleep not offered) — audio that identifies a private individual by voice or spoken name **defaults to vault-only** with a warning that voices are not altered.
+
+**Honest data cost (never-block, shown before anything sends).** Per item the UI shows *derivative size* and *original size*, and whether each **"sends now" vs "queued to send later."** Under Data-Saver / slow-link default: **only the small derivative sends now; the multi-MB sealed original defers** to unmetered/next-open — a sealed original is **never** auto-pushed over 2G without explicit consent. A running tray shows *"Queued: X MB across Y items — sends when you're on a better connection,"* and any heavy fetch is opt-in with its cost shown (§4.12).
+
+**Integrity & confidentiality guards (enforced, not asserted).**
+- The pristine original's bytes and `original_sha256` are **immutable**; the derivative branch reads decoded copies only. Backed by the §18.5 **pixel-level test that the public derivative never contains the vault original's bytes** and a `derivative_sha256 ≠ original_sha256` runtime assertion.
+- **No existence-oracle leak.** The client never fires a naked HEAD-before-PUT on the *sealed original's* hash (who-has-what / timing deanonymization). Dedup is reconciled **server-side after a jittered upload** under the §7.3/§16 low-popularity guard; only *popular* public-derivative hashes may use the existence check.
+- **Encode-failure ladder stays confidentiality-safe.** Redaction (rectangle fill) is codec-free and always succeeds; only downscale/re-encode can fail. Ladder: AVIF→WebP→JPEG-q45→(on OOM) downscale-harder-then-JPEG→ worst case **emit the redacted-but-larger JPEG and defer** (server further optimizes the *already-redacted* derivative). The client **never** falls back to "let the server redact the original" — that would either expose the unredacted original or ship no redacted public copy. Server-side optimization touches **derivatives only** (§16); redaction is client-only.
+
+### 7.6 Low-coverage upload resilience & prioritization (2G / flaky / intermittent / onion)
+
+Extends §7.1 (uploads), §7.5 (which produces the two artifacts this section *ships*), §3.3 (write flow), §9.3 (decorrelated dispatch), §16 (dedup/derivatives) and PRD §4.12. The promise: **the incident is "documented" in seconds on 2G, the public record follows quickly, and the pristine sealed original arrives whenever the network eventually allows — across app kills, network changes, and many sessions — and the user is NEVER blocked waiting on an upload.**
+
+**Three-phase priority ladder (strict ordering; a later phase never steals bandwidth from an earlier one on a congested link).** §7.5 hands the outbox three artifacts: a tiny sealed metadata envelope, a small redacted derivative (stills; video per §7.5's fail-closed rule), and the large client-sealed original.
+
+1. **Register metadata + hashes (tiny, first, always).** One sealed POST to `api` carrying the incident record **plus `original_sha256` and `derivative_sha256`** (typically <4 KB). Minimizing round trips is the whole game on 2G, so this one trip does three jobs: (i) records the incident as *documented* and returns an opaque receipt; (ii) runs the cohort-gated **exists-by-hash** verdict for the derivative → `derivative_held: skip|upload`; (iii) authorizes the vault upload and returns the opaque vault key (§4.4 ULID) + a `media` upload ticket. Seconds even on 2G — the "Saved. / Documented." moment. **Always** sends (tiny, safety-critical minimum), regardless of Data-Saver/battery.
+2. **Redacted derivative (small, publicly verifiable fast).** On `skip` (viral repost already held) the client uploads **nothing** and just links — the dominant win for reposts. Otherwise it goes **direct to `public-media`** under content-addressed key `public-media/sha256/<hh>/<hash>` (§16). A stills derivative (~180–300 KB AVIF) is a **single presigned `PUT`** (no multipart under ~100 MB); a failed small PUT retries whole. Sends on any link.
+3. **Sealed original (large, opportunistic, resumable, spans sessions).** Ciphertext **direct to `evidence-vault`** via resumable multipart, background, **preferring unmetered/good signal**, deferrable indefinitely without ever blocking the user.
+
+**R2 multipart, tuned honestly for 2G (verified against R2 limits 2026-07-22).** R2 enforces **min part 5 MiB (except last), all non-trailing parts identical size, ≤10,000 parts, incomplete-MPU auto-abort after 7 days.** This collides head-on with "small parts for 2G": **5 MiB is the floor — parts cannot be smaller.** Resilience therefore comes from *resumability of the 5 MiB atomic unit*, not tiny parts:
+- **Part size = 5 MiB fixed**, chosen at `CreateMultipartUpload` and immutable for the upload's life (the equal-size rule forbids adapting mid-stream — and we may *start* on 2G, *finish* on Wi-Fi, so we commit to the small unit). 5 MiB is also the atomic waste unit: `UploadPart` is **not** resumable within a part, so a mid-part drop re-sends ≤5 MiB (~4 min at ~20 KB/s) — the smallest waste R2 allows. Bump part size only if an original exceeds 50 GiB (10,000×5 MiB) — never for phone capture.
+- **Concurrency by link quality** (`navigator.connection` `effectiveType`/`downlink`/`rtt`/`saveData`): **serial (1)** on `2g`/`slow-2g` (parallel parts on 2G cause congestion collapse + mutual timeouts), 1–2 on `3g`, 2–4 on `4g`/Wi-Fi.
+- **Backoff:** exponential with **full jitter** — `delay = random(0, min(60s, 1s·2^attempt))`. Error classes: `403`/expired-sig → **re-mint URL, retry immediately** (expected on 2G, not counted as a failure); `429`/`5xx`/`408`/network → backoff-retry; `10011 EntityTooSmall`/`10048`/`400 InvalidPart` → local bug, abort that upload. A part may exhaust in-session attempts, **but the upload is never abandoned** — it persists and resumes on the next trigger.
+
+**Per-part presigned URLs, re-minted on demand (reconciles short-TTL vs a 5 MiB part over 2G).** Each part gets its own SigV4 presigned `PUT` (aws4fetch/S3) scoped to **one `PutObject`, one opaque vault key + part number** — the *tight scope*, not an ultra-short TTL, is what bounds seizure risk. TTL ~**10–15 min** (enough to start *and* finish one 5 MiB part on worst-case 2G), **re-minted per attempt** so a long-queued part never carries a stale URL. SigV4 expiry is checked at request *start*; a part that begins in-window streams to completion, and any `403` re-mints transparently.
+
+**Resume across app restart + network change (survive force-quit).** The multipart cursor lives in the **encrypted outbox** (IndexedDB envelope-encrypted, §3.3), so a 30-min 2G upload survives the app being killed:
+```
+outbox[id] = { state, incident_receipt,
+  derivative:{ sha256,size,mime,key,uploaded },
+  original:{ sha256_plain, cipher_blob (IDB Blob), mime,
+    r2:{ bucket:'evidence-vault', key:<opaque ULID>, uploadId,
+         partSize:5MiB, parts:[{n,etag,done}…], nextPart } },
+  attempts, nextEarliestRetry, createdAt, maxAge }
+```
+On resume the client continues from `nextPart` with the persisted `uploadId` + completed ETags; a `10024 NoSuchUpload` (upload aged out) restarts multipart from scratch. **Configure the `evidence-vault` incomplete-MPU lifecycle to ~30 days** (vs the 7-day default) so genuinely multi-session 2G uploads have room — honestly bounded, not infinite. **Seal-before-enqueue** (§7.5): only ciphertext is persisted and sliced into parts (plaintext original never persists — §4.1), so parts are byte-stable across sessions without re-encrypting on the low-end CPU.
+
+**Exists-by-hash dedup — what it can and cannot do, honestly.**
+- **Public derivative — real exact-byte dedup, the big win.** The server holds derivative *plaintext*, verifies the hash, and `HEAD`-before-`PUT`s the content-addressed key. Viral reposts share a byte-identical redacted derivative → everyone after the first uploads **zero derivative bytes and triggers zero server transcode** (§16 Lever 1: dedup's real value is cutting *compute + moderation-queue volume*). The check runs over the **same abuse-gated `api` path** (Turnstile + cap-cert + PoP + RateLimit DO), **rate-limited, no per-user log** (aggregate counters only), and is **cohort-gated** (§7.3): popular content returns `skip`; an obscure singleton gets **no existence oracle** — it is simply uploaded and reconciled server-side after a jittered delay.
+- **Sealed vault original — cross-user dedup is *impossible* under per-user E2E, and we do not fake it.** Identical plaintext sealed under different per-user keys yields different ciphertext (no cross-user exact-byte match), and sharing one ciphertext across users would hand them bytes they cannot decrypt (breaks E2E). **Convergent encryption is explicitly rejected** — it *is* the confirmation-of-file existence oracle §16 forbids for the vault (why the vault uses opaque ULID keys, never content-addressed). So vault-original dedup is **device-local only** (skip re-sealing an `original_sha256` this device already vaulted); all cross-user savings live in the public derivative. This matches §7.5's "no naked HEAD on the sealed original's hash."
+- **Residual metadata consideration (stated).** Even rate-limited + cohort-gated, `api` *transiently* sees `{cap-cert pseudonym, hash, ts}` — submission inherently links a pseudonym to a clip at a time. Mitigations: no persistent per-user log; **§9.3 decorrelated foreground-jittered flush from a fresh circuit / over onion where possible**; skip the check entirely for singletons.
+
+**Outbox UX & flush (never block, be honest).** Submit writes the outbox synchronously and returns immediately: **"Saved. Will finish sending when you have signal."** Honest per-item progress: *Documented → Public copy sent → Securing original… 3.2/48 MB, resumes on Wi-Fi.* A **Pending** list lets the user watch, retry-now, or **cancel** (best-effort `AbortMultipartUpload` + delete row + wipe cipher blob). **Panic-wipe clears the whole outbox** (rows + cipher blobs + SW caches + IDB, §17.6). Flush triggers, in reliability order: the `online` event; **foreground / next app-open** (`visibilitychange→visible`) — *the only trigger on iOS PWAs*; a manual "try now". **Background Sync / Periodic Background Sync are progressive-enhancement only** (Chromium-only, unreliable, absent on iOS PWA) — registered, never depended on (§9.4). **Battery/data policy:** phase 1 always sends; phase 2 sends on any link; phase 3 **prefers unmetered + good signal**, defers under `saveData`/Data-Saver/battery <15%-not-charging (`navigator.getBattery()` best-effort), and offers an explicit **"send now on mobile data (~48 MB)"** override with the cost shown (§7.5 data-cost tray). **Direct-to-R2 throughout — bytes never proxy the Worker** (§4.1); `api`/`media` see only the tiny sealed metadata and mint presigned URLs.
 
 ---
 
@@ -1000,6 +1082,7 @@ A final solidity pass confirmed the plan **only grew** — no capability was dro
 - **No user-facing email path (invariant guard).** Cloudflare Email Sending is operator/console-side only. Auth, recovery, and user notifications must **never** use email — that would breach the no-email / no-member-directory / content-free-notification invariants. Corrects the §14 Email bullet.
 - **Personas:** add **seeker** (incl. students, persons with disabilities), **volunteer/curator**, **provider/org** to PRD §3 (they were modeled in §14 but missing from the §3 table). All are client-held lenses, zero-account browse, no role registry.
 - **Duress/decoy** (BIP39 passphrase → decoy tree, §5.2) gets an explicit Settings → safe-mode entry in the UX so it is not silently dropped at build.
+- **Client-side media pipeline is specified in §7.5** (the ordered on-device path pre-seal/pre-upload). Where §7.1, §4.4, §4.12 or S4.12/PRD §4.4 describe "downscale + metadata-strip before upload," "redact → two outputs," or adaptive/Data-Saver derivatives at a summary level, **§7.5 is the authoritative expansion** — including the fail-closed order (strip→redact+confirm→derivative→hash-original→seal-original), thread placement (Web Worker vs main), the adaptive-quality ladder with a hard legibility floor, the honest "no on-device video transcode / no day-1 video face-cover" posture, and the confidentiality-safe encode-failure ladder. The §18.5-P2 "pixel-level test that the public derivative never contains the vault original's bytes" is the guard for its central integrity invariant.
 
 ### 18.2 Build-vs-switch-on (removes all Session-3 scope ambiguity)
 
@@ -1030,3 +1113,139 @@ Author this table first; it drives `wrangler.jsonc`, `infra/*.tf`, and a `worker
 
 - **P1 — M0 resource manifest** (§18.3) authored first. **P1 — seed-content pipeline:** `content/{directives,kyr,crisis-cards,directory-seed}/` source format, two-person review record, **named human owners** (legal reviewer, medic reviewer, en/hi translators, m-of-n signers), and the signed `.harborage-pack` build step — without these, M1 ships a shell with nothing to sign. **P1 — D1 backup/DR:** periodic **signed export of public-plaintext tables** → `knowledge` bucket + non-CF mirror + a restore-into-fresh-account procedure (account termination is a named threat; E2E/off-platform classes excluded by construction). **P1 — foundry design-token package** (`packages/foundry`): `tokens.css` + build + an AA-contrast CI gate, consumed by `apps/web` + `apps/console` (repoint §17.8 to PRD §15 tokens).
 - **P2** — trust-engine conformance tests (state machine, Sybil/CIB simulation, reach-table conformance, "flag-storm can't bury truth", "mob can't cheaply verify", and a guard that the fixed action-enum has no code path to publish/delete/unredact/name); a **pixel-level test that the public derivative never contains the vault original's bytes**; a **protest-day load harness** (k6/artillery for LiveBoard HLL ingest, Queue drain under surge, SpendCap under flood); a **privacy-safe war-room dashboard** (queue backlog, SpendCap %, error rate, DO P99 memory, per-colo flag-flip latency) via Analytics Engine aggregate counts only — no per-identity/IP/geo; a concrete **Capacitor APK milestone before M3** (M3 capture tier + M5 reviewer naming depend on it); Paraglide 2.x inlang layout + the no-AI-tells ICU gate + "safety strings never machine-translated, named-reviewer record" enforcement; document the native-R2-presign fallback for maintenance-mode `aws4fetch`.
+
+---
+
+## 19. Low-bandwidth media & upload resilience
+
+Harborage users film on cheap Android phones over 2G, congested 3G, or onion routes that drop mid-request. The media pipeline is built so that nothing the user did is ever lost to a bad connection, nothing sensitive leaks while we work around that connection, and the pristine original that anchors chain of custody is never quietly altered or quietly abandoned. This section is the authoritative expansion of the summary-level "downscale + strip / redact → two outputs" text elsewhere in the docs.
+
+### The on-device pipeline, in fixed order
+
+Every still runs through the same gated sequence before any byte leaves the phone. Each step is a gate; you cannot skip forward.
+
+1. **Ingest raw capture** into memory and immediately write an **encrypted crash-quarantine copy** so a mid-pipeline crash never loses the capture.
+2. **Read intrinsic dimensions cheaply** (header/`ImageDecoder` metadata, not a full decode) and compute the downscale factor.
+3. **Decode + downscale to the final derivative resolution.** Prefer `ImageDecoder` with a scaled output frame; use `createImageBitmap(blob, {resizeWidth, resizeQuality:'high'})` **only where it is feature-probed as supported**. Never assume one-step decode-and-scale exists — where it doesn't, an unbounded full decode of a 12–108 MP photo OOMs the exact 1–2 GB phones we target.
+4. **Bake the solid-fill redaction boxes at the final derivative resolution.**
+5. **Render the exact bytes that will be encoded/previewed, and run the human before/after confirm on *those* bytes.** The pixels the user approves are the pixels that ship. We do **not** confirm a display working copy and then re-apply the box geometry through a second render path — coordinate rounding there can shift a box a few pixels and under-cover a face nobody reviewed.
+6. **Strip metadata from the derivative branch only.** Re-encoding through canvas already drops EXIF/GPS; the derivative carries none.
+7. **Encode the derivative** (see adaptive quality below), then **hash the derivative** (`derivative_sha256`, WebCrypto).
+8. **Hash the pristine original** (`original_sha256`) from its untouched bytes.
+9. **Seal the original** client-side with XChaCha20-Poly1305 (`@noble/ciphers`; libsodium secretstream as the alternate). The Worker and edge only ever see ciphertext.
+10. **Commit both** as independent, `original_sha256`-linked outbox items.
+11. **Release buffers.**
+
+Two invariants force this order and never bend:
+
+- **No public derivative without an irreversible solid-fill redaction the human confirmed on the final bytes.** Any uncertainty, decode failure, or user abort → the item is **vault-only**; no public artifact is produced.
+- **The pristine original is always hashed and always sealed**, byte-for-byte. Its exact bytes plus SHA-256 anchor the §63 BSA chain of custody, so we never lossy-recompress it, never strip its metadata (that metadata is provenance, protected by the seal rather than by deletion), and never mutate it. Optimization touches derivatives only. The derivative branch reads decoded *copies* (`createImageBitmap` mints a fresh bitmap); the original bytes and `original_sha256` are immutable.
+
+**Thread placement, so the phone stays responsive.** The redaction canvas and pointer handling live on the main thread. Decode, downscale, re-encode, both SHA-256 passes, and the seal all run in a Web Worker. No heavy WASM loads on first paint: hashing is WebCrypto, image work is built-in browser APIs, the seal is a few-KB pure-JS cipher, and the Opus encoder is lazy-loaded only when the audio flow actually opens.
+
+### Adaptive quality — small, but never illegible
+
+Quality is chosen from `navigator.connection` (`effectiveType`, `saveData`, `downlink`, `rtt`) with an EWMA measured-throughput fallback for iOS and any browser missing the API. Day-1 keeps this to a **simple slow/fast split** rather than three fragile tiers:
+
+- **Slow (2G / `saveData`):** 1280 px long edge, ~120 KB target, sealed original deferred.
+- **Fast (3G+ / unmetered):** up to 2048 px, ~400–600 KB target.
+
+Encoding is **WebP with a JPEG fallback only.** We deliberately **drop client-side AVIF**: it is the least-supported, slowest, most crash-prone encode path on low-end WebView and buys nothing durable, because the archive (§16) re-derives the AVIF master server-side from the already-redacted derivative. The client codec is non-load-bearing.
+
+There is a **hard legibility floor**: a badge, banner, or official's face must stay readable — never below 1280 px long edge or roughly JPEG q35. If a byte target would push below that floor, **legibility wins and the derivative defers** rather than shipping something unreadable.
+
+Because adaptive parameters would otherwise bake the submitter's connection class into the public file (a 2G-at-capture fingerprint that, with timestamp and locale, is a small deanonymization signal), **the durable public artifact is the server-normalized master, not the client encode.** The client encode is transitional and replaceable. If a client encode must serve as the public object briefly, its dimensions/quality are snapped to fixed bins decoupled from the upload decision.
+
+### Priority ladder — documented first, secured eventually, never blocking
+
+Uploads run in three phases; a later phase never steals bandwidth from an earlier one on a congested link.
+
+**Phase 1 — Register metadata + hashes. Tiny, first, always.** One sealed POST to `api` (<4 KB) carrying the incident record, `original_sha256`, and `derivative_sha256`. This single round trip (round trips are the enemy on 2G) records the incident, returns an opaque receipt, runs the cohort-gated exists-by-hash verdict for the derivative, and authorizes the vault upload with an opaque ULID key and a media ticket. It completes in seconds.
+
+*Confidentiality tradeoff, stated plainly:* this is exactly the packet that links `{pseudonym, hash, ts}`, and sending it immediately maximizes correlation between the physical incident and the network trace of whoever filmed it. So it is **not a silent immediate default for high-risk captures.** For high-risk mode, Phase 1 uses the §9.3 decorrelated, foreground-jittered dispatch from a fresh circuit / over onion, accepting that "Documented" is delayed. "Documented in seconds" is reserved for lower-risk use or explicit opt-in. Decorrelation only defeats a network byte-flow correlator; the server still sees one record linking the two hashes to a pseudonym — that linkage is inherent to submission and we don't pretend otherwise.
+
+**Phase 2 — Redacted derivative. Small, publicly verifiable.** On a `skip` verdict (a byte-identical redacted derivative is already held) upload nothing, just link. Otherwise a single presigned `PUT` goes direct to `public-media` at the content-addressed key `public-media/sha256/<hh>/<hash>` (stills are ~180–300 KB, well under the single-PUT ceiling; a failed PUT retries whole). Sends on any link.
+
+**Phase 3 — Sealed original. Large, opportunistic, resumable, spans sessions.** Ciphertext goes direct to `evidence-vault` via resumable multipart, in the background, preferring unmetered/good signal, deferrable, never blocking.
+
+### Custody status is a first-class, exported state
+
+The biggest integrity risk in a chronic-2G world: Phase 1 registers a hash and hands back a "Documented" receipt, but the actual bytes (Phase 3) may sit deferred for a long time — and the only copy is an IndexedDB Blob that Android WebView can silently evict under storage pressure, that panic-wipe destroys, and that a seizure or reinstall wipes. A ledger asserting a pristine original that the vault never received, and that no longer exists on the phone, reads in court as spoliation. So:
+
+- The outbox and every export carry an explicit **`original_status ∈ {on_device_only, vaulting, vaulted, lost}`**, and it flips to `vaulted` **only** after `CompleteMultipartUpload` succeeds.
+- A Documented incident is **never presented as evidence-backed** in any public or legal export until `original_status = vaulted`. A hash registered without vaulted bytes is explicitly a weaker claim than a vaulted one, and the export says so.
+- At enqueue we call `navigator.storage.persist()` and check quota. If persistence is denied or quota is tight for a multi-MB blob, we warn the user plainly: **the sealed original exists only on this device — reach Wi-Fi or back it up.** We state outright that panic-wipe and IDB eviction permanently destroy a not-yet-vaulted original.
+
+### Resumable multipart, tuned honestly for 2G
+
+R2's real limits (verified 2026-07-22): minimum part 5 MiB except the last, all non-trailing parts identical size, ≤10,000 parts, incomplete uploads auto-abort after 7 days by default. **5 MiB is the floor — parts cannot be made smaller for 2G.** Resilience therefore comes from resumability of the 5 MiB atomic unit, not from tiny parts.
+
+- **Part size = 5 MiB fixed**, set at `CreateMultipartUpload` and immutable for the upload's life (the equal-size rule forbids adapting mid-stream — we may start on 2G and finish on Wi-Fi). It is also the atomic waste unit: `UploadPart` is not resumable within a part, so a mid-part drop re-sends ≤5 MiB. Bump only for an original over ~50 GiB, which phone capture never reaches.
+- **Concurrency by link:** serial on slow-2g/2g (parallelism there just causes congestion collapse), 1–2 on 3g, 2–4 on 4g/Wi-Fi.
+- **Presigned per-part TTL sized to comfortably exceed worst-case transfer, not minimized.** The stated risk bound is *scope* — each URL is one `PutObject` on one opaque key and part number — so a short TTL buys little while it can guillotine a part that genuinely can't push 5 MiB in a 15-minute window on loss-heavy slow-2g (~5.8 KB/s), looping forever without converging. TTLs are hours (still far under SigV4's 7-day max), re-minted per attempt, checked at request start so a part that begins in-window streams to completion; any `403`/expired re-mints transparently and is treated as expected, not a failure.
+- **Backoff:** exponential with full jitter, `delay = random(0, min(60s, 1s·2^attempt))`. Error classes: expired-sig → re-mint and retry; `429`/`5xx`/`408`/network → backoff-retry; `InvalidPart`/malformed → local bug, abort that upload. A part can exhaust in-session attempts, but the upload is never abandoned — it persists and resumes.
+- **Honest throughput floor:** below roughly 5 KB/s sustained, a 5 MiB part cannot complete. We don't silently retry forever; the item stays `on_device_only`, we tell the user, and we lean on the Wi-Fi/backup guidance above.
+
+**CORS and the terminal step (M0 infra deliverables).** Browser JS cannot read the ETag from a presigned `UploadPart` response unless the bucket's CORS policy sets `Access-Control-Expose-Headers: ETag` (and allows `PUT`/`POST` from the app origin) — without it, every vault multipart is uncompletable. This CORS rule for `evidence-vault` **and** `public-media` is a named M0 deliverable. Each part's ETag is persisted immediately after its `UploadPart`, before `nextPart` advances. When every part is done the item transitions to a distinct **`completing`** state and issues `CompleteMultipartUpload` idempotently: `NoSuchUpload`/already-completed is treated as success if a `HEAD` confirms the object, else the multipart restarts. This survives a kill between the last part and completion.
+
+### Resume across restart, network change, and force-quit
+
+The multipart cursor lives in the envelope-encrypted outbox:
+
+```
+outbox[id] = { state, incident_receipt,
+  derivative: { sha256, size, mime, key, uploaded },
+  original: { sha256_plain, cipher_blob (IDB Blob), mime,
+    r2: { bucket:'evidence-vault', key:<opaque ULID>, uploadId,
+          partSize: 5MiB, parts:[{ n, etag, done }…], nextPart } },
+  original_status, attempts, nextEarliestRetry, createdAt, maxAge }
+```
+
+Only **ciphertext** is persisted and sliced into parts — plaintext never persists — so parts are byte-stable across sessions with no re-encrypt on the low-end CPU (seal-before-enqueue). Resume continues from `nextPart` with the persisted `uploadId` and ETags. A `NoSuchUpload` (aged out) restarts the multipart. We set the `evidence-vault` incomplete-MPU lifecycle to **~30 days** (vs the 7-day default) so a multi-session 2G upload has honest room — bounded, not infinite.
+
+### Exists-by-hash dedup — honest about what E2E allows
+
+- **Public derivative → real exact-byte dedup, over the abuse-gated `api` path.** The server holds derivative plaintext, verifies the hash, and does `HEAD`-before-`PUT` on the content-addressed key. The check is rate-limited with aggregate counters only (no per-user log) and **cohort-gated**: a popular hash returns `skip`; an obscure singleton gets no oracle and is simply uploaded and reconciled server-side after a jittered delay. The real payoff is saved server transcode and moderation-queue work, not storage.
+- **Honest scope of the win:** exact-byte dedup only fires on **literal re-uploads of an already-published derivative file** — a viral repost. Two witnesses independently filming the same scene pick different redaction geometry, produce different pixels, and get different hashes, so they do **not** dedup. Catching same-scene captures is a job for server-side perceptual/near-dup clustering (§16), which is a moderation aid, not byte dedup.
+- **Sealed vault original → no cross-user dedup, and we don't fake it.** Identical plaintext under different per-user keys yields different ciphertext, and sharing one ciphertext would hand others bytes they can't decrypt. **Convergent encryption is explicitly rejected** — it *is* the file-existence confirmation oracle the vault forbids (hence opaque ULID keys). Vault-original dedup is device-local only; all cross-user savings live in the derivative.
+- **Residual metadata, stated:** even gated and rate-limited, `api` transiently sees `{pseudonym, hash, ts}`. Mitigations: no persistent per-user log, §9.3 decorrelated flush over a fresh circuit, and skipping the check entirely for singletons.
+
+### Encrypted outbox — never block, honest about state
+
+Submit writes the outbox synchronously and returns instantly: **"Saved. Will finish sending when you have signal."** Progress is per item and honest: *Documented → Public copy sent → Securing original… 3.2 / 48 MB, resumes on Wi-Fi.* The `original_status` above is what the copy reflects, so a user never believes an original is safe in the vault when it's still only on their phone.
+
+The pending list supports watch, retry-now, and **cancel** (best-effort `AbortMultipartUpload`, delete the row, wipe the cipher blob). **Panic-wipe clears the whole outbox** — rows, cipher blobs, service-worker caches, IndexedDB — and we state plainly that this destroys any not-yet-vaulted original.
+
+Flush triggers, ordered by reliability: the `online` event; **`visibilitychange → visible` on next foreground/open, which is the only reliable trigger on iOS PWAs**; and manual "try now." Background Sync and Periodic Background Sync are progressive enhancement only (Chromium-only, absent on iOS) — registered, never depended on.
+
+Battery/data policy: Phase 1 always; Phase 2 on any link; Phase 3 prefers unmetered + good signal, with an explicit "send now on mobile data (~48 MB)" override that shows the cost. Battery-aware deferral is **opportunistic only** — `getBattery()` is unavailable on iOS/Safari and gated in recent Chromium, so it never gates anything on its own; link quality plus the user override are the load-bearing signals. A running tray shows "Queued: X MB, Y items." Throughout, bytes go **direct to R2** — the Worker only ever mints presigned URLs and sees the tiny sealed metadata.
+
+### Video — the honest caveat
+
+Stills redact and re-encode reliably on-device. **Frame-accurate solid-fill redaction of video is not reliable on low-end Android** (WebCodecs is patchy), and unredacted video must never reach the server. So:
+
+- **Video needing redaction fails closed to SEALED_ONLY.** The full original is sealed and deferred whole (reusing the same resumable-multipart machinery). The **only** day-1 public artifact is a **redacted poster keyframe** run through the still pipeline. There is no eventual server-produced face-covered video, and we do not imply one: the Container only ever receives an already-redacted derivative or nothing, and for redaction-needed video it gets nothing (the original is E2E-sealed). A safe full video can only ever come from the user re-processing on-device later. The copy says the video's faces are **not** covered and it stays sealed until the user acts.
+- **Poster generation is fallible.** iPhone-origin HEVC/H.265 and some high-bitrate H.264 won't decode in Android WebView. We probe decode; on failure we **fail closed to SEALED_ONLY** with explicit UI ("couldn't build a shareable still on this device — the video is sealed and private"), never a silent missing poster. The codec is recorded in provenance so a capable device or the no-redaction server path can build the poster later.
+- **Server-side transcode/trim language is reserved strictly for the human-confirmed no-redaction-needed path**, where a metadata-stripped, container-level-trimmed (no re-encode) derivative legitimately reaches the Container. Trims on redaction-needed video are recorded as provenance markers only.
+- **Audio:** low-bitrate Opus (24–32 kbps mono) only where `MediaRecorder` makes it cheap, else keep-original-and-defer. No day-1 voice anonymization, so voice/name-identifying audio defaults vault-only with a warning.
+
+### Integrity notes on the "encode ran" check
+
+`derivative_sha256 ≠ original_sha256` is kept **only** as a cheap "an encode actually ran" sanity check — explicitly **not** the redaction guarantee (two byte streams differ even if only metadata was stripped). The redaction guarantee is the human before/after confirm on the final bytes plus a recorded **`redaction_confirmed`** provenance flag that gates publication, with an assertion that the confirmed box regions are present in the shipped derivative. The §18.5 pixel-level test (the public derivative never contains the vault original's bytes) backs confidentiality, not redaction completeness.
+
+### Smallest correct day-1 vs later
+
+**Day-1 (MVP):**
+- Fixed-order still pipeline with confirm-on-final-bytes; vault-only fail-closed on any redaction uncertainty.
+- Simple slow/fast adaptive split; WebP + JPEG only (no client AVIF); hard legibility floor.
+- Three-phase upload: register-and-hash, derivative-first, original-deferred.
+- Resumable 5 MiB multipart with cross-session resume, idempotent complete, `original_status` export, CORS/ETag infra, 30-day incomplete-MPU lifecycle.
+- Cohort-gated derivative dedup; no vault dedup, convergent encryption rejected.
+- Encrypted outbox UX: never-block, honest status copy, cancel, panic-wipe, `online` + foreground flush.
+- Video redaction → SEALED_ONLY + redacted poster (fallible, fail-closed); low-bitrate Opus where cheap.
+
+**Later:**
+- Server-side AVIF master + perceptual near-dup clustering (§16).
+- On-device video redaction if/when WebCodecs is reliable on the target fleet.
+- Background Sync as opportunistic enhancement where present.
+- Voice anonymization.
