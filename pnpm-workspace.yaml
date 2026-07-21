@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - workers/*
+  - packages/*
+
+# pnpm 10 blocks lifecycle scripts by default; only these may run build scripts.
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

@@ -1,0 +1,10 @@
+pnpm-lock.yaml
+.svelte-kit/
+dist/
+build/
+.wrangler/
+src/lib/paraglide/
+CLAUDE.md
+PRD.md
+ARCHITECTURE.md
+RUNBOOK.md

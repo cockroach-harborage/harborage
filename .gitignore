@@ -40,3 +40,10 @@ secrets/
 .DS_Store
 *.log
 coverage/
+
+# test artifacts
+playwright-report/
+test-results/
+
+# generated i18n runtime
+apps/web/src/lib/paraglide/

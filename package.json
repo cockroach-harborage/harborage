@@ -1,0 +1,22 @@
+{
+  "name": "harborage",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.18.3",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "gates": "node tools/gates/run-all.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.6.0",
+    "prettier-plugin-svelte": "^3.4.0",
+    "typescript": "^5.6.0"
+  }
+}
