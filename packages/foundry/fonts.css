@@ -1,0 +1,6 @@
+/* Self-hosted fonts, two weights only (PRD §15). Served from the app bundle;
+   unicode-range in the Fontsource CSS keeps actual downloads to the scripts in use. */
+@import '@fontsource/noto-sans/400.css';
+@import '@fontsource/noto-sans/600.css';
+@import '@fontsource/noto-sans-devanagari/400.css';
+@import '@fontsource/noto-sans-devanagari/600.css';

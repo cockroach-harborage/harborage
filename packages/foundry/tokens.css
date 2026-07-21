@@ -1,0 +1,66 @@
+/* Harborage design tokens. Source of truth: PRD.md §15 "Starter design tokens".
+   This is the one token set. Changing a colour requires re-running the AA contrast
+   gate (tools/gates/gate-contrast.mjs) and updating PRD §15 in the same commit. */
+:root {
+	--sp-1: 4px;
+	--sp-2: 8px;
+	--sp-3: 12px;
+	--sp-4: 16px;
+	--sp-5: 24px;
+	--sp-6: 32px;
+	--sp-7: 48px;
+	--r-sm: 8px;
+	--r-md: 12px;
+	--r-lg: 16px;
+	--r-pill: 999px;
+
+	--font: 'Noto Sans', 'Noto Sans Devanagari', system-ui, sans-serif;
+	--text-xs: 0.8125rem;
+	--text-sm: 0.9375rem;
+	--text-base: 1.0625rem; /* 17px */
+	--text-lg: 1.25rem;
+	--text-xl: 1.5rem;
+	--text-2xl: 1.875rem;
+	--lh-tight: 1.3;
+	--lh-body: 1.6;
+	--fw-reg: 400;
+	--fw-semi: 600;
+
+	--motion-fast: 120ms;
+	--motion-base: 200ms;
+	--ease: ease-out;
+
+	/* light */
+	--bg: #f7f7f5;
+	--surface: #ffffff;
+	--border: #e2e2dd;
+	--text: #1c1c1a;
+	--text-muted: #5c5c57;
+	--accent: #0f6e6e;
+	--accent-text: #ffffff;
+	--hazard: #b23a1e;
+	--safe: #2e6b3e;
+	--caution: #8a6a0f;
+	--info: #5c5c57;
+	--focus: #0f6e6e;
+}
+:root[data-theme='dark'] {
+	--bg: #141414;
+	--surface: #1f1f1e;
+	--border: #34342f;
+	--text: #edede8;
+	--text-muted: #a0a099;
+	--accent: #3ba3a3;
+	--accent-text: #0a2e2e;
+	--hazard: #e8785a;
+	--safe: #5fb878;
+	--caution: #d6a93b;
+	--info: #a0a099;
+	--focus: #3ba3a3;
+}
+@media (prefers-reduced-motion: reduce) {
+	* {
+		transition-duration: 0ms !important;
+		animation: none !important;
+	}
+}
