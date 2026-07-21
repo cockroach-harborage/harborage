@@ -266,12 +266,16 @@ Append-only hash chain in a DO (`H_i = SHA256(H_{i-1} ‖ payloadHash_i)`) recor
 
 ### 7.3 Source-media import (resolves Decision 14)
 
+> **Updated by §16 (Session 2.5):** source media is now **fingerprint-AND-preserve**, not fingerprint-only. Imported evidence is deduped by `original_sha256`, a redacted optimized derivative is admitted to the public Evidence Archive, and one pristine original is sealed in the vault. Copyright / IT-Act §79 posture and the counsel gate before any irreversible step (Bucket Lock / replication) are in §16.
+
 **Fingerprint-and-reference, never re-host by default** (copyright / IT-Act conduit exposure). Store canonical content-ID + perceptual hash; any evidentiary copy goes to the sealed vault only. **Perceptual hashing cannot run in a Worker** (no image/video decode, 128 MB, CPU limits) — so:
 - Fingerprints for imported links are computed on the **off-platform arms-length fetch box** (the same egress Decision 14 needs), which fetches over Tor, pooled/deduped by content-ID, **no per-user fetch log.**
 - **Low-popularity URLs get a deliberate delay + minimum-cohort threshold** before fetch (or skip fetch and store only the user-supplied content-ID/pHash) — dedup only anonymizes *popular* content; an obscure single-referrer URL is otherwise ~1:1 time-correlated to the submitter.
 - pHash near-dup matching lives in a **BK-tree / banded LSH** structure (Hamming distance), **not Vectorize.**
 
 ### 7.4 AI-assisted human-in-the-loop moderation
+
+> **SUPERSEDED by §15 (Session 2.5) — AI verification is now DAY-1 CORE, not deferred.** Because Harborage serves an *ongoing* protest with real use before human moderators exist, the AI + community + reputation layer is the day-1 core. It runs autonomously on **reversible** actions only (label, rank, hide-pending, retain-pending), honestly labeled "not human-verified," with a low capped ceiling. It is **never** autonomous on irreversible high-harm actions (individual naming, unredaction, precise-location reveal, permanent deletion) — those stay m-of-n human-gated and ship OFF. The material below is retained for its Tier-0 floor, spend-cap, and degrade-ladder detail (which §15 builds on); where it reads "AI is deferred," §15 governs.
 
 **v1 = Tier-0 only.** Free lexical/dictionary detectors (PII/doxxing regex, incitement lexicon "confront/find/retaliate", known-bad pHash lookup, EN/HI language routing) + community flagging + **reputation-gated reach** (unverified never amplified) + human review. This is the always-on safety floor that runs even at zero AI budget.
 
@@ -288,6 +292,8 @@ Append-only hash chain in a DO (`H_i = SHA256(H_{i-1} ‖ payloadHash_i)`) recor
 ## 8. Accountability & Legal Boundary (red lines 1 & 2)
 
 ### 8.1 On/off-platform split
+
+> **Refined by §15 (Session 2.5):** autonomous institutional-pattern accountability aggregates **only to non-individually-resolvable granularity (station / unit / rank-band / shift)**. Any single-person-resolvable identifier — **badge number**, name, specific plate — is treated as *individual* naming, not institutional, and is routed to the §8.2 human-gated Review-gate, which ships OFF until reviewers exist.
 
 | Data | Custody |
 |---|---|
@@ -418,7 +424,9 @@ Every action pinned to a full 40-char SHA (zizmor/ratchet enforce); **CODEOWNERS
 
 ## 12. Build Order for Session 3
 
-All 13 domains are *architected*; they are **not all built for v1**. A volunteer team ships a coherent core sequenced behind the legal/organizational critical path. **Each data-holding milestone is gated on BOTH its counsel interlock AND the existence of the human org that operates it.**
+All domains are *architected*; they are **not all built for v1**. A volunteer team ships a coherent core sequenced behind the legal/organizational critical path. **Each data-holding milestone is gated on BOTH its counsel interlock AND the existence of the human org that operates it.**
+
+> **Updated (Session 2.5):** the **autonomous AI + community trust engine is M1 day-1 core** (§15), not deferred — the human moderation org is a **hardening** milestone (A0→A3), not a launch prerequisite, for the reversible surface; only the irreversible m-of-n gates (individual naming, unredaction, precise-reveal, permanent delete) stay human-gated and ship OFF. The **public Resource Directory** (seed pack + zero-account offline browse) is **M1** (see PRD §14); the **Community Feed** is **M3**; the **Evidence Archive** reversible parts (dedup / transcode / data model / display) are **M3**, with Bucket Locks + off-CF replication + IPFS counsel-gated (§16). New day-1 components: `VerificationStateDO`, `SpendCapDO`, `CoordinationWindowDO` (ephemeral CIB, no persisted graph), `ReReviewQueueDO`, `FLAGS` KV, `resource_entries` D1 table. IaC + minimal manual surface per §17 + [RUNBOOK.md](./RUNBOOK.md).
 
 | Milestone | Scope | Launch-readiness gate |
 |---|---|---|
@@ -554,3 +562,420 @@ Ordered most load-bearing first. Includes all OUTDATED / INCORRECT findings plus
 - **Security/edge**: Turnstile free; WAF custom rules + rate-limiting rules per-plan caps confirmed (custom keying needs Business+); Zero Trust Free ~50 seats; Access supports FIDO2/passkeys; Transform Rules can only *remove* `cf-connecting-ip`/XFF (proxy re-adds XFF; CF still logs IP); `opportunistic_onion` still exists (opportunistic, not censorship-circumvention).
 - **CI/CD**: **No OIDC-to-Cloudflare path** — still a long-lived scoped API token (Discussion #11434 / wrangler-action #402 open as of 2026-06); `wrangler deploy --temporary` is explicitly NOT a CI/CD substitute. Secrets Store still Beta. Sigstore keyless (Fulcio/Rekor) + build-provenance approach current. minisign/rsign2 signing current. syft+grype pattern current.
 - **Client/crypto**: `@noble/ciphers` XChaCha20-Poly1305 and `libsodium-wrappers-sumo` (`crypto_box_seal`/`crypto_secretstream`) confirmed; ProofMode / Simple C2PA current for capture provenance. Privacy Pass RFCs (9576/9577/9578) stable but **no audited npm implementation** — treat as custom-build/defer.
+
+---
+
+## 15. Progressive Trust & Safety (autonomous-first, human-hardened)
+
+Harborage supports an **ongoing** protest. Real protestors and the public use it **from day 1 — before** a vetted human trust-&-safety org exists. Therefore the autonomous **AI + community + reputation** layer is the **day-1 core** that must stand alone and stay true and credible with **zero moderators online**; the human org is a **hardening milestone layered in "at the scale it demands,"** not a launch prerequisite. This reverses the prior "AI-deferred / human-org-is-a-switch-on-interlock" posture — **for the reversible surface only.** Every irreversible high-harm action stays m-of-n human-gated and ships **kill-switched OFF**.
+
+The single organizing rule:
+
+> **AI + community may act autonomously only on REVERSIBLE, NON-CATASTROPHIC actions. Every IRREVERSIBLE, HIGH-HARM action stays m-of-n human-gated and ships OFF until reviewers exist.**
+
+**Load-bearing honesty (from the adversarial review, now first-class):** the threat actor is a **STATE**. The whole credibility argument reduces to one wall — the source-diversity / independence corroboration test — and a resourced state (aged accounts on distinct residential/mobile networks, generative/staged media, CAPTCHA farms) **can climb that wall**. So this design **does not claim** autonomous verification defeats a determined state op. It claims something narrower and true: the **autonomous ceiling is held deliberately low** (below any label or reach a user would treat as reliable-for-action), the highest-harm content classes are **never autonomously amplified**, suppression levers are closed, and **nothing good is destroyed** while humans are absent. Credibility comes from **honest labeling + a low ceiling + reversibility**, not from pretending the wall is unclimbable.
+
+### The two layers, and the transition
+
+- **LAYER A (day-1, autonomous):** Tier-0 lexical floor + AI Gateway Guardrails / `llama-guard-3-8b` (en/hi) + embeddings→Vectorize + pHash + community response (report/corroborate/upvote/downvote/flag) + earned per-compartment scalar reputation. Drives **verification-state, reach/ranking, and quarantine-PENDING (hide-not-delete)** with **no human in the loop** — restricted by construction to reversible, non-catastrophic actions, honestly labeled "algorithmic/community, NOT human-verified." **Autonomous ceiling = `Community-Corroborated` with a capped, sub-amplification reach** — it never earns "Verified" language and never reaches the top reach tier.
+- **LAYER B (hardened, capacity-keyed):** vetted pseudonymous reviewers, added at measured throughput, (i) take over high-stakes + appeals, (ii) **unlock** the human-gated actions that shipped OFF (individual naming, unredaction, per-case precise reveal, permanent deletion), (iii) add the one state Layer A refuses — **`Human-Verified`**, the only state that carries "verified" language and full reach — and (iv) **retroactively audit and override** Layer-A verdicts, feeding corrections back as reputation and threshold signal.
+
+The transition is **continuous and per-action**, gated on measured human **throughput** (read from a `FlagState` DO), never a calendar date and never a single "org exists" boolean. Human review **sits above** the pipeline draining queues and operating the m-of-n gates; it never rebuilds it.
+
+### THE DECISION MATRIX (autonomous vs human-gated)
+
+`AI-alone` = classifier/state engine, no human. `AI+community-thr` = requires reputation-weighted, independence-gated community threshold (see state machine). `NOBODY / OFF` = kill-switched; no autonomous path exists in code.
+
+| # | Action | Reversible? | Layer A — day-1 (autonomous) | Layer B — hardened (human) |
+|---|---|---|---|---|
+| 1 | **Assign verification state** | Yes | AI-alone sets default `Unverified` + `AI-Screened`; **AI+community-thr** drives `Corroborating`/`Community-Corroborated`/`Disputed`/`Debunked`. Ceiling = `Community-Corroborated` | Humans set **`Human-Verified`** (unreachable autonomously); override any provisional; retroactive relabel (append-only, visible) |
+| 2 | **Rank / amplify (up-rank)** | Yes | AI+community-thr; reach = pure function of state × √-damped author-rep. **Autonomous max reach is capped below full amplification** | `Human-Verified` unlocks the top reach tier that autonomous states cannot reach |
+| 3 | **Down-rank** | Yes | AI-alone (quality/risk) + community signal | Human audit + override; feeds threshold tuning |
+| 4 | **Quarantine-PENDING (HIDE, not delete)** | Yes | AI-alone on high-risk (≥0.85, two-signal) — immediate; **AND** community path (independent, AI-concurred, CIB-clear). Retained-pending, auto-re-review | Single-reviewer confirm/release; latency hours→minutes |
+| 5 | **Auto-purge radioactive public payload** | Reversible-in-effect | AI-alone, **narrowest scope only**, split by target (see Red-line reconciliation). Two independent signals; audit row kept; vault original untouched | Humans review audit rows, tune thresholds, measure false-purge rate |
+| 6 | **Publish INDIVIDUAL identity (accountability naming)** | **No — irreversible** | **NOBODY / OFF.** Institutional-pattern accountability at **non-individually-resolvable granularity only** launches autonomously | **Unlocks** the m-of-n Naming Review-gate (default WITHHELD, 7 conditions). Red-line-2 stays stricter default-DENY |
+| 7 | **Unredact evidence** | **No** | **NOBODY / OFF.** Auto solid-fill redaction runs; undoing never runs autonomously | Multi-person-gated, logged, watermarked, reviewer-wellbeing safeguards |
+| 8 | **Reveal precise location** | **No — red line 3** | **NOBODY / OFF.** Only coarse geohash-zone / crowd-band. No live precise-GPS, no who-was-where log — **ever** | Public precise broadcast + persistent who-was-where **never unlock**; only the narrow aid-matching per-case reveal (human + two-responder + late-mutual-reveal) |
+| 9 | **Permanent delete of evidence** | **No** | **NOBODY / OFF.** Default = quarantine hides + retains | m-of-n human; restricted-access retention preferred over deletion |
+| 10 | **Resolve appeal** | Yes | AI-alone auto-recovery: fresh classifier pass + community re-vote + reputation recheck; auto-restore if it clears; **always queue for humans** | Human adjudication with SLA; m-of-n for high-stakes appeals; retroactive override sweeps |
+
+Rows 6–9 are the explicit **"cannot be safe without humans"** set. They are implemented, wired, tested, then left **OFF** behind an **unsatisfiable m-of-n quorum** (empty reviewer-key directory ⇒ fail-closed by construction). Row 8's public-precise and who-was-where sub-cases **never unlock at any capacity**.
+
+### The verification-state machine (AI + community + reputation)
+
+States, with the **one canonical reach table** below as the single source of truth (resolving prior cross-doc contradictions). **Feed baseline = 1.0** (plain chronological placement). "Amplified" means reach **> 1.0**. "Never amplified" means reach **≤ 1.0**.
+
+```
+ (default) → UNVERIFIED ──AI clean──► AI-SCREENED ──indep-corrob──► CORROBORATING
+                                                                        │
+                                            §independence bar + AI concur, dwell
+                                                                        ▼
+                                                            COMMUNITY-CORROBORATED   ← autonomous ceiling
+                                                                        │              (labelled "NOT human-verified")
+                                                              Layer B only │
+                                                                        ▼
+                                                                 HUMAN-VERIFIED       ← only "verified" state
+ side states:  DISPUTED (contested label)      DEBUNKED (hard-evidence only)      QUARANTINE-PENDING (hidden, retained)
+```
+
+**Canonical reach table (build to exactly this; conformance-tested):**
+
+| State | Reach vs baseline | Notes |
+|---|---|---|
+| Quarantine-Pending | **hidden (0)** | author + future-reviewer visibility only; retained-pending |
+| **Unverified** (default) | **1.0 (baseline, chronological)** | **NEVER pushed/recommended/boosted.** Absence of provenance shown neutral, never as guilt |
+| AI-Screened | **1.0** | "not obviously unsafe" ≠ true; badge differs, reach identical to Unverified |
+| Corroborating | **≤ 1.3 (area/topic cohort only)** | modest, labeled; **autonomous fast-tier is rate-limited** (see directive class) |
+| **Community-Corroborated** | **≤ 1.5 (autonomous ceiling)** | labeled "AI-checked & community-corroborated, **NOT yet human-verified**." Never full amplification |
+| Disputed | **see rule below** | contested **label**; reach depends on **dispute provenance** |
+| Debunked | **0.3** | hard-evidence only; correction attached; retained, re-reviewable |
+| **Human-Verified** (Layer B) | **up to 3.0** | only state with "verified" language and top reach |
+
+**Disputed reach rule (closes the muddy-the-waters suppression lever):** a dispute **only** clamps reach if the counter-signal **itself clears the same independence-diversity bar** as verification. A counter-cluster that is CIB-attributed or fails independence-diversity is treated as an **attack signal, not disagreement**: the item keeps its **earned reach** and only gains a contested label. **No genuinely-corroborated item can ever be pushed below baseline by synthesized disagreement** — this is a hard invariant with a conformance test.
+
+**Promotion conditions (defaults; KV/counsel-tunable, heightened-mode multiplies):**
+
+| Transition | Conditions (ALL) |
+|---|---|
+| Unverified → AI-Screened | `llama-guard` safe + Tier-0 clean |
+| AI-Screened → Corroborating | ≥ **2** independent corroborators, `C ≥ 3.0`, **min-dwell ≥ 15 min** (even here — closes the false-directive fast-path), no open CIB |
+| Corroborating → **Community-Corroborated** | ≥ **K=4** distinct corroborators across ≥ **S=3** independence buckets, `C ≥ 6.0`, `C/F ≥ 3:1`, **min-dwell ≥ 60 min**, **≥1 corroborating item whose media-provenance chains to a prior-established high-rep source in a different compartment**, AI concurs, no open CIB, **cohort-pivot detector clear** |
+| any → Disputed | independence-passing counter-cluster **or** AI↔community disagreement (reach rule above applies) |
+| any → Debunked | **hard evidence only** (exact pHash to known-debunked / provable provenance contradiction) |
+| → Community-Corroborated / Human-Verified | never for **directive/operational** content (separate class, below) |
+
+**Two anti-manipulation invariants baked in:** (1) **a flag storm cannot bury truth** — coordinated identical flags are a **CIB signal, not consensus**: item routes to **Disputed + human queue**, never auto-suppressed; (2) **a mob cannot verify a falsehood cheaply** — promotion needs source-diverse, independence-gated, reputation-gated credit **plus** an independent anchor **plus** AI concurrence, and the top state (`Human-Verified`) is unreachable autonomously.
+
+### Directive / operational content — a never-autonomously-amplified class (new)
+
+Real-time operational directives ("teargas at north gate, move south," "organizers say regroup at Gate 5," "police clearing, disperse") are the **highest-harm disinfo** and the **fastest-traveling** — and `llama-guard` gives **zero** resistance (a false directive violates no hazard category). So directive/logistics/call-to-action content is carved into its **own class**:
+
+- **Never autonomously amplified above baseline (1.0)**, regardless of corroboration state — it can reach `Community-Corroborated`'s label but **not** its reach boost.
+- **Hard interstitial always:** "Unverified directive — do not act on this without independently confirming."
+- **Mandatory min-dwell** even at Corroborating; **rate-limit** on how fast any item gains area-cohort reach so a minutes-old burst can't drive a crowd.
+- **Physical-plausibility cross-check** against the coarse live-board signal where feasible (a "north gate" directive inconsistent with coarse crowd-band is down-weighted).
+- Classifier routes ambiguous items **into** this class (fail toward "treat as directive").
+
+### Day-1 AI verification pipeline (Cloudflare primitives)
+
+Public tier only; the **sealed client-side vault original is never server-readable, never sent to Workers AI, never autonomously purged.** Ordering is fail-safe: cheapest/most-decisive safety first, budget-bounded AI next, community continuous, reach last (default: no amplification).
+
+```
+submit (public tier)
+ └ Turnstile (personhood-lite, Tor-tuned; refuse-not-plaintext fallback) + layered rate-limit (DO token bucket, per-cap-cert / per-ASN-bucket / global)
+   └ Tier-0 lexical ($0, always-on): PII/doxx regex, incitement lexicon (en/hi), known-bad pHash, language route
+     └ radioactive tripwire? → split-by-target purge/hide (Red-line reconciliation)
+     └ SpendCapDO gate (strongly-consistent daily Neuron counter) checked FIRST
+        ├ under cap → AI Gateway Guardrails (GA, en/hi) wrapping llama-guard-3-8b (native Hindi)
+        │             + embeddinggemma-300m (768-dim, pinned) → Vectorize (cosine): near-dup / recycled-narrative / claim-cluster
+        │             + pHash recycled-media (OUTSIDE Vectorize: Images binding / Container, BK-tree/LSH Hamming)
+        │             + doxx/PII tripwire (regex + Guardrails DLP + NER-lite), private-individual scope only
+        └ at cap → DEGRADE (see spend-cap ladder)
+           └ VerificationStateDO (per-item FSM; alarms; append-only audit) ⇄ community layer → reach decision
+```
+
+Each stage **emits a normalized signal** `{stage, category, score, lang, advisory, model_version, evidence_ptr, ts}` — **never a verdict, never a deletion.** The `VerificationStateDO` (per-item, SQLite, strongly consistent, serialized so no read-modify-write race under a vote storm) is the **only** thing that mutates authority, and its action vocabulary is a **fixed enum `{label, rank, hide-pending, retain-pending, route-to-gate}`** — there is no code path from a model output to publish/delete/unredact/name. All Workers AI traffic routes **through** AI Gateway so Guardrails also screens model **input and output** (prompt-injection firewall). `llama-guard` is a classifier with no tools; a successful injection at worst corrupts one score, which is checked against the two-signal-agreement rule (**no single classifier is terminal for a takedown**).
+
+**Models & budget:** `@cf/meta/llama-guard-3-8b` (en/hi authoritative; other languages advisory→community-only, never an autonomous adverse verdict), `@cf/google/embeddinggemma-300m` (768-dim, **immutable at index creation**), Vectorize cosine, pHash Hamming outside Vectorize.
+
+### Spend caps & degrade (specified degraded-mode state machine — closes the DoS-to-degrade attack)
+
+Enforced by a **strongly-consistent `SpendCapDO`** (single DO, input-gate-serialized Neuron counter). Before any paid call: `reserve(estimated_neurons)`.
+
+- **Prefilter discipline:** Tier-0 (free) runs on 100% of items; paid S2/S3 run **only on Tier-0/Guardrails-flagged items + a ~2–5% random audit sample.**
+- **TRIAGE the budget, not first-come:** a **reserved paid-AI floor** is dedicated to a **high-priority queue** (life-safety / detention / high-reach / accountability) that bulk feed load **cannot consume**. An attacker's submission flood is rate-limited/prioritized so it **cannot starve real incidents of scoring**.
+- **Degrade ladder:** `full AI → cheaper-model/prefiltered → Tier-0 + community-only`. **AI-capped is a first-class sustained mode** (a national protest day *will* sit capped), not an emergency.
+- **Degraded-mode FSM (explicit, fail-toward-not-suppressing-truth):** at cap, **do not stall truth** — community-only items may still reach **`Corroborating`** (community + Tier-0), but **`Community-Corroborated` is HELD** (its AI-concurrence precondition is unmet) until AI budget returns and a re-scan runs. AI-concurrence is **never silently waived** to unblock promotion. Held items are queued oldest-first for deferred AI re-scan on counter reset. This makes **both** degrade failure modes safe: truth is not frozen, and fabrication is not handed a free pass by dropping the one independent check.
+
+### Community-signal + reputation + manipulation-resistance engine
+
+**The spine:** reach is **never** a function of raw engagement. Votes/flags are **inputs to the state machine, not outputs to the ranker.** A mob can generate unlimited votes; it cannot cheaply generate **independent corroboration** or **earned reputation** — and only those move reach.
+
+**Reputation** — PII-free, per-compartment scalar `r ∈ [0, R_max]`, **no social/follow/vouch graph, no member directory** (invariant); reputation-gated powers carried by **blind-token / anonymous credential** so the server holds no list. New account `r₀ ≈ 0.05` (near-powerless). Vote weight `w = W_cap · √r` (√-damping; a whale cannot dominate; `W_cap` caps any single account). **Hard participation gate `r_gate = 0.15`:** below it, votes/flags count **only** as input to the human queue and CIB detector — never toward an autonomous state or reach change. Reputation is **outcome-settled** (retroactively, on items reaching terminal-ish states), **not** earned by receiving votes; **per-compartment** (feed rep grants zero power in accountability); **decays** (half-life ~60d); **per-epoch gain cap** + age/personhood multipliers make farming slow.
+
+**Corroboration credit (source-diversity is the wall):**
+```
+C = Σ_clusters min( clusterCap , Σ_{i∈cluster, r_i ≥ r_gate} √r_i ) ,  clusterCap = 1.0,  require K_src distinct clusters
+```
+Clusters are **ephemeral, behavior-only** (ASN bucket, timing burst, device-class, stylometry-lite, template similarity), scoped to the item's DO window and **discarded on alarm** — **no co-witness or social graph is ever persisted.** A new report increments `independent_source_count` **only** if it clears independence vs existing members: **distinct media provenance** (pHash recycled-media match ⇒ **1** source via `canonical_content_id` — kills "everyone reposts the same clip"), **text novelty**, **behavioral independence** (CIB-clear), **account independence**.
+
+**The four named attacks and their status (honest):**
+
+- **(a) Verify a falsehood** — *raised to expensive, not impossible.* Needs `K/S` distinct independence-passing corroborators past a dwell window **plus** a cross-compartment provenance anchor **plus** AI concurrence. Amateur mobs: defeated. **A resourced state with aged accounts + distinct networks + generative/staged media CAN reach `Community-Corroborated`** — which is exactly why that ceiling is **capped below reliable-for-action reach**, directive content is **never** amplified, and the top state stays human-only.
+- **(b) Bury the truth** — **closed.** Flags never auto-remove; mass-flag → CIB → Disputed/hold with the **provenance-aware Disputed reach rule** (synthesized disagreement carries no reach penalty). Flaggers who pile onto a later-verified item **lose reputation**.
+- **(c) Doxx / wrongly name** — **structurally impossible autonomously.** Naming is human-gated, ships OFF, quorum unsatisfiable.
+- **(d) Astroturf to the top** — **closed for cheap attacks, capped for expensive ones.** √-damping + `r_gate` + `clusterCap` + recycled-narrative/media collapse + behavior-only CIB. Ceiling capped regardless.
+
+**Sleeper reputation-farming (patient state tradecraft) — mitigated, and stated as a residual:** caps/decay/outcome-settlement assume the attacker misbehaves early; they do **nothing** against accounts that behave well for weeks then pivot. Mitigations: **cohort-pivot detection** (a sharp shift — long unrelated independent history suddenly co-corroborating one hot item — is itself a coordination signal **even without a burst**); **weight corroboration by diversity of corroboration history** (accounts that have **never before co-appeared** and have unrelated topic footprints count more than raw earned scalar); **escalating proof-of-work / cost on reputation-earning actions** (not on reading). **Documented limit:** reputation is **not** a sufficient anti-manipulation defense against a patient adversary — which is why the ceiling stays low and naming stays human-gated.
+
+**Sybil foundation (Tor-tuned personhood) — documented hard limit:** Turnstile is deliberately tuned permissive to admit Tor/VPN; commercial CAPTCHA/human-farms can mint personhood-tier accounts cheaply. This is **not fixable to zero** without strong identity (which the anonymity requirement forbids). Therefore: personhood-issuance correlation is a **CIB input** (spikes → heightened-threat trigger), reputation gain leans on **hard-to-fake real-world-outcome anchoring**, and — the load-bearing consequence — **the autonomous ceiling stays low by design.**
+
+**Community notes (bridging, not majority):** context notes show **only** when they earn a `cross_perspective_score` (helpful to raters who usually disagree — Birdwatch-style), computed from **rater diversity**, not count. Notes are additive context, never a takedown lever; a well-rated note pushes the target to **Disputed** (reversible) and feeds re-review.
+
+### Red-line reconciliation
+
+- **Red line 1 (no public target list; official-capacity only):** incident documentation + **institutional-pattern accountability** launch autonomously — but **aggregated ONLY to non-individually-resolvable granularity: station / unit / rank-band / shift.** **Any individually-resolvable identifier — badge number, name, specific vehicle plate, "the officer with the scar" — is moved OUT of the autonomous track** into the human-gated Naming Review-gate. *(Correction applied: a badge number resolves to one human; autonomous "corroborated" misconduct against `badge 1234` is de-facto naming/defamation and a state pretext — it is barred from the autonomous track.)* Individual naming stays **NOBODY/OFF** until the m-of-n org exists.
+- **Red line 2 (no plainclothes identity claims):** stricter default-DENY; the asserted identity is **never stored** (only claim + evidence hash); no autonomous path toward publication; **OFF**.
+- **Red line 3 (no live precise-GPS / no who-was-where log):** unchanged. Autonomous layer operates on incident/claim content + area-coarse geo only. Precise-location reveal is human-gated and OFF; public-precise + persistent who-was-where **never unlock**.
+
+**Radioactive auto-purge — split by target (closes the "purge real evidence" hole):**
+
+| Content | Autonomous action |
+|---|---|
+| Private-individual PII **authored as an attack** (doxx), or explicit violence-intent, `llama-guard ≥ 0.95` **AND** Tier-0 corroboration | **Short-purge the public payload** (retaining it is UAPA/BNS-radioactive), keep non-content audit row `{opaque_id, category, action, ts, model_version, confidence}`, **only if a recoverable vault original exists**; else **hide-not-purge** |
+| PII appearing as **evidence of state/official doxxing** ("police circulated protestor home addresses — screenshot") | **Quarantine-HIDE + retain-pending + human queue. NEVER autonomous purge** — retention of evidence-of-a-crime is defensible; auto-destroying it aids the perpetrator |
+| Uncertain (`llama-guard` 0.80–0.95, single-signal, generic threat) | **Auto-quarantine (hide), retain-pending, do NOT purge** |
+| CSAM | hard route out-of-band, never retained, never re-reviewed autonomously |
+
+Purge hold **lengthened** (default now longer than 15 min, KV-tunable) so a legitimate Tor poster can notice and file. **Re-submission is never the only recovery path for high-interest evidence.** **Anti-weaponization:** the doxx tripwire targets **private-individual PII only**; official-capacity records are **out of scope** (they route to the m-of-n gate, never suppression); tripping another account's quarantine is rate-limited + reputation-weighted; coordinated identical tripwire-triggering is a **CIB signal → Disputed/hold**, never autonomous suppression.
+
+### Transparency & honest labeling
+
+Every item shows **provenance** + an **explicit, honest state badge** naming the verdict's nature; the append-only state log makes silent up-labeling detectable:
+
+- Unverified → "**Unverified** — not checked or corroborated. Do not rely on this."
+- AI-Screened → "**AI-checked (automated)** — not corroborated, not human-verified."
+- Community-Corroborated → "**AI-checked + community-corroborated — NOT yet human-verified.**"
+- Disputed → "**Contested** — corroboration and refutation conflict."
+- Debunked → "**Debunked** — see attached correction."
+- Human-Verified (Layer B) → "**Human-reviewed.**"
+
+A user-facing **honest-limits statement** (onboarding + linked from every badge) states plainly: there are not yet enough human reviewers; "community-corroborated" ≠ human-confirmed-true; automated checks are en/hi only and can be wrong; **a determined coordinated group may have tried to game a label and our defenses reduce but do not eliminate this**; we will never autonomously name an individual, reveal precise location, or unseal evidence; hidden ≠ gone — press "Request re-review"; **contested/uncertain is the normal state under attack, and absence of a Verified label is not evidence of falsity.** *Treat everything as documented, corroborated allegation — not proven fact.*
+
+### Appeals & error-recovery without humans
+
+Nothing good is permanently lost while humans are absent (except illegal-to-retain radioactive payloads, recoverable via re-submission / independent vault original). Every autonomously-actioned item (except short-purge) is **retained-pending**; the item's DO sets an `alarm()`:
+
+- **On every new signal** → recompute.
+- **Every T ≈ 6h** → fresh classifier pass (if capped: Tier-0 + community re-vote only — degrade, don't stall).
+- **Auto-restore** from Quarantine when hazard < release threshold **AND** flags decayed **AND** CIB cleared.
+- **"Request re-review"** button re-runs the full pipeline immediately (rate-limited) and **queues for humans**.
+- **Always** enqueue to the human console (behind Access) so reviewers arrive to a waiting, prioritized backlog — the empty-queue failure mode is *"held safely, auto-re-checked,"* not *"lost."* **Disputed items with high independent original corroboration are prioritized to the top of the human queue** (the muddy-the-waters steady state is expected).
+
+### Heightened-threat mode interaction
+
+The existing single composite `FlagState` flip gains trust-layer effects — all **tightening**, all reversible: multiply every corroboration threshold (K 4→6, S 3→4, dwell 60→180 min, C/F 3:1→5:1); **nothing below `Community-Corroborated` is amplified at all** (Corroborating drops to pull-only); **disable low-rep voting** below an `r` floor; lower `llama-guard` hold thresholds (R-High 0.95→0.90); earlier spend-cap degrade; shorten retain-pending timers; force onion-only sends. Human-gated actions stay OFF — heightened mode **never loosens**. Flip latency honestly bounded by per-colo KV TTL (5–10 s), not instant.
+
+### Fail-safe defaults (explicit)
+
+| Situation | Default |
+|---|---|
+| New content | **Unverified**, chronological, **not amplified** |
+| Directive/operational content | **Never amplified above baseline**, hard interstitial, min-dwell |
+| AI ↔ community disagree / low confidence | **Disputed / hold** — never a destructive/irreversible action |
+| Synthesized (CIB / low-independence) disagreement | Contested **label only**, **no reach penalty** |
+| Coordinated flags | **HOLD + auto-re-review** — never auto-suppress |
+| Autonomous negative action | **Hide (reversible), retained-pending** — never delete |
+| Radioactive payload | Split-by-target; purge **only** private-attack PII with a vault original; else hide-not-purge; audit row |
+| Uncertain about independence | Count as **dependent duplicate** (don't increment) |
+| AI budget cap hit | Degrade to Tier-0 + community-only; **hold Community-Corroborated**, don't stall Corroborating; reserved paid floor for life-safety |
+| Removal vs publication | Removal single-trigger of *hidden* state; **publication/naming quorum-required, fail-toward-not-publishing** |
+
+### Solidification roadmap — keyed to human throughput, not dates
+
+| Phase | Human-capacity trigger | Unlocks | Tightens |
+|---|---|---|---|
+| **A0** | 0 vetted humans | Full Layer A. #6–9 OFF. Everything append-only-logged. Appeals auto-recover + queue | — |
+| **A1** | 1–2 vetted admins (part-time), Access + HW-MFA | **Sampled audit:** 100% of quarantines + 100% of auto-purge audit rows + 100% of Disputed + random 2% of Community-Corroborated. Single-reviewer quarantine release. Humans may stamp `Human-Verified` | Quarantine can go more aggressive (release now fast); AI-path bar → 0.75 |
+| **A2** | m-of-n quorum (≥3 distinct role-keys) + counsel sign-off | **UNLOCK #6 individual naming** (Review-gate), **#7 unredaction**, human appeal SLA, **#8 narrow aid-matching precise reveal** | Autonomous ceiling reach **capped down** (humans carry top); Community-Corroborated sampling 2%→10% |
+| **A3** | 24/7 org staffed to protest-day surge | `Human-Verified` is the norm for high reach; **m-of-n #9 permanent delete**; continuous retroactive override sweeps | Autonomous top-tier capped further; radioactive auto-purge can **relax** its ≥0.95 bar (humans now backstop the false-positive tail); heightened mode auto-raises thresholds |
+
+As reviewer throughput rises: (a) the **sample fraction** of Layer-A decisions getting human eyes rises toward continuous coverage of high-stakes classes; (b) the **top of the trust ladder migrates** from autonomous `Community-Corroborated` to `Human-Verified`; (c) the **irreversible actions unlock in risk order** (institutional patterns already live → sampled release → individual naming/unredact/precise-aid at quorum → permanent delete at full staffing). Every override is an append-only, publicly-visible relabel that adjusts contributor reputation (still a PII-free scalar — no "who-was-wrong" roster).
+
+---
+
+## 16. Evidence Archive (durable, open, storage-minimized)
+
+Harborage's evidence subsystem gains an **Evidence Archive**: a durable, openly-citable, deletion-resistant record of media documenting official misconduct, built so that removal of the source anywhere else (platform takedown, poster deletion, upstream block) never affects our copy. It extends — does not replace — the existing capture → hash+provenance → PII-scrub + irreversible redaction → dual-output pipeline (ARCH §7.1). The archive defines *what happens to the two outputs* and *how the community builds on them*.
+
+The governing principle, learned from adversarial review, is: **DURABLE is not IMMUTABLE.** The archive is engineered to survive hostile deletion, but it never engineers away its own ability to purge illegal content or correct a poisoned entry. Permanence is *earned per item* by human attestation after a re-scanned probation window — never conferred automatically by the autonomous admission path.
+
+### The two layers, and what each guarantees
+
+| | Public redacted archive | Sealed E2E vault |
+|---|---|---|
+| **Holds** | ONE optimized, verified, PII-scrubbed, face/plate-redacted, **non-radioactive** derivative per unique media | ONE pristine original per unique media (exact-byte deduped), client-side XChaCha20-Poly1305 |
+| **Custody class** | PUBLIC-PLAINTEXT (safe to be permanent, public, citable, mirrored) | CLIENT-SIDE E2E (platform cannot read; keys off-platform, Shamir threshold) |
+| **Key scheme** | Content-addressed on the **derivative hash** | **Opaque ULID** (no content/identity/time in key — preserves ARCH §4.4 invariant) |
+| **Guarantees** | Durability + integrity + open verifiability of the *redacted evidentiary rendering* | Chain-of-custody anchor: the exact submitted bytes are preserved and re-hashable, unreadable by the platform |
+| **Openly documented?** | Yes — this is the authoritative public record | No — existence acknowledged, contents never disclosed |
+
+Both layers are durability targets. Only the public layer is openly documented and mirrored in plaintext; the vault replicates as **ciphertext only**.
+
+### The admission rule (explicit, fail-closed)
+
+**A byte becomes permanent/public ONLY if ALL of these hold**, each logged to the custody chain:
+
+1. **Verified** — the autonomous trust pipeline (AI signals + community corroboration + reputation) reached the admission threshold, with independent multi-source corroboration (§ anti-poisoning below).
+2. **Redaction confirmed** — automated face/plate/ID + PII detection proposed irreversible solid-fill redaction, and it was *human-confirmed*: submitter before/after confirm for own capture, or ≥2 independent established-contributor confirms for third-party import. Any uncertainty → **SEALED_ONLY** (vault only, never public). Redaction review also assesses **contextual re-identification** (location, signage, clothing, tattoos, event uniqueness) — face-cover alone is not anonymization.
+3. **Non-radioactive** — passes Tier-0 lexical + known-bad pHash + CSAM hash-match screening (AI advisory later, per ARCH §7.4). Any hit → auto-quarantine → short-purge. Radioactive content is **never transcoded, never deduped into the permanent set, never locked, never replicated.**
+4. **Optimized derivative produced** (below).
+
+Unverified/quarantined items are never in the permanent public archive and are never amplified — reach is earned by verification, not engagement. Pristine originals and victim identities **never** enter the public layer.
+
+### Deletion-resistance — separated from immutability
+
+Four mechanisms, applied **in sequence, only after certainty grows**:
+
+**1. Content-addressed storage (public layer).** The public object key is the SHA-256 of its own derivative bytes (`public-media/sha256/<hh>/<hash>`). The key *is* the digest, so an object cannot be silently altered in place — mutation changes the key. Exact-byte dedup is a `HEAD` before `PUT`. The vault stays on **opaque ULID keys** — content-addressing there would create a deanonymization existence oracle (anyone holding a copy of an original could confirm we hold it).
+
+**2. Probation before any lock or replica (the critical fix).** A newly-admitted object is **fully deletable** during a mandatory **probation/challenge window (30–90d, counsel-set)**, during which it is continuously re-scanned against rolling CSAM-hash lists, known-bad pHashes, and updated lexicons, and is open to dispute. Bucket Locks and off-Cloudflare replication apply **only after probation clears** — because immutability applied before certainty turns any detection miss into permanently un-purgeable illegal content or a permanently-exposed victim.
+
+**3. Bucket Locks — bounded, never indefinite, always purge-overridable.** After probation, R2 Bucket Locks (native retention, not S3 Object Lock) give operator-resistant, compulsion-resistant immutability against a *rogue admin quietly deleting*.
+
+| Bucket | Lock | Duration |
+|---|---|---|
+| `evidence-vault` (ciphertext) | Retention, **fixed-duration, extendable** (e.g. 10 yr, extend under legal hold) — **not indefinite** | Long |
+| `public-media` (derivatives) | Retention, fixed-duration rolling (e.g. 10 yr) | Long |
+| `knowledge` (docs/bundles) | Short or none | 1–2 yr |
+
+A **multi-party, logged short-purge override authority supersedes every lock and replica for illegal content or a legitimate erasure order.** This is the governing invariant *above* deletion-resistance: "immutable from day 0" and "can always purge CSAM" are mutually exclusive — we choose purgeability. Legal review must confirm that self-imposed inability to remove illegal content is not itself an exposure.
+
+**4. Independent off-Cloudflare replication (v1: one target, human-gated for people-bearing).** Bucket Locks defend within Cloudflare; they do not defend against account termination or a Cloudflare-level order. So durable = exists in ≥2 trust domains. v1 replication is deliberately minimal:
+
+- **Signed BagIt export packs → ONE off-Cloudflare S3-compatible store** (different jurisdiction, its own object-lock). Packs carry the public derivatives (or their hashes), a custody-chain slice with **per-item timestamps stripped/coarsened**, the covering Merkle root, and an aggregate provenance *status* — **never keys, never per-contributor signing material, never raw sensor bundles** (those are cross-item linkable). Egress from R2 is free; the second store's volume is small.
+- **IPFS: manifests and Merkle roots only** — never the whole archive (commercial pinning ≈10× R2 and unbounded), and **never people-bearing derivatives** (a CID is self-perpetuating and unrecallable; one missed face becomes a permanent global exposure that "de-list from display" cannot reach). IPFS/partner mirroring of any people-bearing bytes is a **later, human-attested, highest-bar, one-way** step — documented verbatim as irreversible.
+
+### Tamper-evidence (alteration/deletion detectable, even against us)
+
+- **Per-object SHA-256** = the public key (any change is visible).
+- **Append-only custody hash-chain** (per item, in a Durable Object): each event (`ingest`, `redact`, `admit`, `probation-clear`, `lock`, `replicate`, `dispute`, `tombstone`) records `record_hash = SHA256(prev_hash ‖ canonical(record))`. Schema is fixed and carries **no deanonymizing fields** (no IP, no device, no real name; actor = pseudonymous role/band only).
+- **Batched, jittered Merkle checkpoints → OpenTimestamps (primary).** A daily-minimum, **coarse, jittered** signed Merkle root is anchored to **OpenTimestamps** (Bitcoin-anchored, free, jurisdiction-independent); Rekor optional/secondary. **Never hourly, never per-ingest, never per-item timestamps externally** — that is a contributor-deanonymization timing oracle against singleton submitters. An item enters a checkpoint only after it joins a cohort ≥K or a randomized delay elapses (reuse the §7.3 low-popularity cohort guard for checkpoint inclusion). Only **roots** leave Cloudflare.
+- A **static inclusion-proof verifier** in the public archive lets any third party check an object's hash → custody record → Merkle path → external anchor, without trusting Harborage.
+
+### Storage optimization (eat R2 no more than extremely necessary), integrity intact
+
+The ordered levers, with a concrete national-protest-day estimate. Reference load: 50,000 submissions ≈ **897 GB** for one copy; naïve "store every original + a derivative" ≈ **1.8 TB/day** — the number to beat.
+
+**Lever 1 — Deduplication (the dominant lever, and the real point).**
+- **Exact-byte dedup is the ONLY thing that collapses storage.** Key = `original_sha256` (client-computed). Identical bytes → one stored object + N lightweight provenance rows in D1.
+- **Perceptual clustering never deletes anything.** pHash (PDQ/dHash images, keyframe-sequence + TMK/PDQF video, Chromaprint audio) is *presentation/corroboration only* — it groups reposts of one clip under one incident for display, and a reviewer can split a cluster. Two different-angle videos of the same event are **distinct evidence**; keying keep/discard on a perceptual cluster would destroy the second angle. **Rule: exact-byte dedup deduplicates storage; perceptual dedup deduplicates presentation.**
+- **Privacy-safe existence check:** reuse the §7.3 low-popularity guard verbatim — popular content returns "already held, just corroborate"; obscure/singleton content gets no existence oracle and is reconciled server-side after a jittered upload.
+- **Dedup sensitivity, stated honestly:** repost-heavy virality suggests high duplication, but a *documentation* archive invites original footage, so we model a **conservative 40–85% range**. At 85%: ~135 GB unique/day. At 40–50%: several× larger — still cheap in R2. **Dedup's primary value is cutting COMPUTE and moderation-queue volume** (we transcode/verify the unique set, not all 50k submissions), not saving trivial storage dollars.
+
+**Lever 2 — Transcode derivatives (unique set only; never the pristine original).** Target evidence-legibility (read a badge/banner/plate; faces already redacted), not broadcast masters.
+- **Images:** `env.IMAGES` binding → **AVIF** q≈50–58, long-edge ≤1600–2048px (20 MB input ceiling; oversized/RAW → Container). ~4 MB JPEG → ~180–300 KB. One AVIF master; `format=auto` handles WebP fallback at serve time.
+- **Video:** Cloudflare Container (ffmpeg) → a **fast, cheap codec for v1 — H.264 high or VP9, or SVT-AV1 at a FAST preset (~8–10), not preset 6.** ≤720p, ≤30 fps, Opus audio, redundant streams stripped. **No per-view fallback re-encode** — store one derivative, serve it directly (free egress), cache poster frames. AV1 at slow presets is deferred to an optional *batch* cold re-encode if storage ever bites — Container CPU-seconds, not storage, is the real budget line.
+- **Audio:** Opus 24–48 kbps mono (speech).
+
+**Lever 3 — On-demand variants, not stored.** One master per media; thumbnails/tiles/low-bandwidth variants via Images URL transforms + edge cache. Free egress + per-month transform dedup makes this near-free.
+
+**Lever 4 — Original-retention (integrity-preserving).** Keep **one pristine original per exact-unique admitted media, always.** Admission already requires Verified, so **never discard the pristine original of an admitted item** — an obscure singleton can be the only record of a killing years later, and "re-request from the pseudonymous submitter" is fantasy that defeats requirement #1. Given near-free vault storage, **default to keeping all non-radioactive pristine originals.** Only radioactive/never-admitted content short-purges (already handled). The `original_sha256` is retained in D1 **forever**, even for purged radioactive items (as a non-content audit row).
+
+**Deferred from v1 (add later, measured):** Standard→IA tiering (30% of a tiny bill, adds retrieval-fee surprises on hot reads + lock/lifecycle interaction), compress-then-encrypt (2–8% gain, costs CPU on the low-end devices we protect), canonical-content-ID normalization.
+
+**Integrity is never traded for size.** Each object row: `original_sha256` (the sole integrity anchor, always kept), `derivative_sha256` (its own hash), `derives_from = original_sha256`, and a **version-pinned `transform_recipe`** so an expert can reproduce the lossy-but-honest rendering. The §63 BSA attestation certifies the *pristine original's* hash; the derivative carries its own hash and a "derived-from" link. `canonical_content_id`, if used, is a **best-effort dedup HINT with pinned tool version — never an integrity anchor** (ffmpeg/libvips output drifts across builds).
+
+**Net protest-day (85% dedup illustration):** ~14 GB public derivatives + ~39 GB deduped vault ciphertext ≈ **~53 GB new/day**. Roughly **250 GB/month → ~$3.75/mo**; a full year ≈ 3 TB ≈ **~$45/mo**, egress $0. Storage is a rounding error against the $100+/mo budget. **The binding costs are Container transcode compute and the moderation queue — both cut proportionally by dedup — which is why dedup is justified on compute, not storage.**
+
+### Community contribution on all fronts (autonomous-first pipeline)
+
+Contribution flows are typed, signed, blind-token-carried, reputation-weighted; none is trusted alone. Each attaches to a `cluster_id`/`harb_id`, never keyed to identity.
+
+| Front | Action | Effect |
+|---|---|---|
+| Submit media | `SUBMIT_MEDIA` | Vault original + candidate derivative (on-device redaction confirm) |
+| Submit link | `SUBMIT_LINK` | Arms-length off-platform fetch (Tor, pooled, no per-user log); redacted derivative admitted, pristine third-party bytes sealed in vault only |
+| Corroborate | `CORROBORATE` | Adds *distinct provenance* to independence score |
+| Verify | `VERIFY` | Weighted vote into state machine (never sole basis) |
+| Geolocate / OSINT | `GEOLOCATE`, `CHRONOLOCATE` | Structured claim + evidence hash; independent agreement = strong signal |
+| Transcribe / Translate | `TRANSCRIBE`, `TRANSLATE` | Versioned text layers; machine translation flagged advisory; safety-critical strings human-reviewed |
+| Tag | `TAG` | Controlled taxonomy (no free-text PII into public fields) |
+| Context | `CONTEXT_NOTE` | Community-notes-style, append-only, helpfulness-rated |
+| Redaction review | `REDACT_CONFIRM` | Fail-closed gate for people-bearing third-party media |
+
+**Autonomous-first, human for the irreversible step.** Display/corroboration/verification signals run autonomously (AI + community + reputation) so the honest human-review bottleneck doesn't gate throughput. But the **irreversible steps — external "Verified", lock, and any mirroring — require explicit human sign-off** plus a settling period and a raised corroboration threshold K against a resourced Sybil adversary. Reputation is carried by **blind tokens / anonymous credentials** (server holds no roster); a contribution presents `{band proof, one-time nullifier}` — the nullifier stops double-counting without revealing or linking identity. There is no contributor→item edge table, no co-witness graph, no identity↔pseudonym map.
+
+### Anti-poisoning + correction/retraction (append-only, tamper-evident)
+
+A state adversary planting a convincing fake that reaches "Verified" is the primary threat, and durability must not make a wrong entry permanent.
+
+- **Recycled/repost & known-debunked detection** — pHash BK-tree flags resubmitted-as-new and auto-DISPUTEs known-debunked hashes.
+- **Deepfake/synthetic — advisory only** (`low/medium/high`); never auto-rejects or auto-admits; "high" forces extra corroboration + human review.
+- **Metadata/chronolocation consistency** — EXIF vs claimed time/place, sun/shadow, weather; inconsistency requires reconciliation before promotion.
+- **Independent multi-source corroboration** — K=2 with valid C2PA/ProofMode provenance, K=3 for provenance-less imports, plus ≥2 distinct provenance origins. **Independence is scored, not graphed;** coordinated-timing/identical-payload bursts down-weight to near-zero and route to human review.
+- **External status is short-lived and revocable.** A durable "Verified" is **never** emitted into a mirror/export on the autonomous path. Exported status is a **short-lived signed assertion consumers must re-check against a live revocation feed**; bundles are versioned and re-signed on demotion. Framing: "community-corroborated, preservation — not authentication."
+- **Correction/retraction is append-only supersede, never erase.** `disputes` is append-only; Verified→Disputed→Debunked demotes and de-amplifies. On Debunked the derivative is withdrawn from *local* display, but the tamper-evident record that it existed and was retracted **remains public** — a planted item's takedown is itself documented. For anything already mirrored, docs state verbatim that de-list is **local-only** (which is exactly why mirroring is the last, human-gated step). Radioactive content is the sole exception where payload does not persist (short-purge).
+
+### Provenance & open-documentation export (no deanonymization, no sealed leak)
+
+- **Citable stable ID** — `HRB-<base32(SHA-256(original_bytes)[:10])>`, deterministic and re-derivable by re-hashing the pristine original; a `-vNN` suffix versions the derivative/annotation without changing evidentiary identity.
+- **Per-item provenance surfaced** — `original_sha256`, C2PA/ProofMode status (validated internally, shown as `valid/invalid/absent`), capture-time + confidence, verification label, independent-source count, custody checkpoint root. **Absence of provenance shown neutral, never as guilt.**
+- **Machine-readable schema** — JSON-LD extending schema.org `ClaimReview` + a `harborage:EvidenceItem` vocabulary. Contributions represented only as `{opaque_token, reputation_band, type}` — **no contributor pubkeys, no per-device signing keys, no raw sensor bundles** (all cross-item linkable).
+- **Signed export bundles** — `.harbex`/BagIt packs, Ed25519/minisign-signed by an offline m-of-n project key, written immutably to `knowledge`. Every field audited for cross-item linkage before it ships; per-item timestamps coarsened. Sealed vault data and contributor identity are **structurally absent** from every export path — you cannot leak what the export layer cannot read.
+- **Read-only public API** (Worker), rate-limited, no auth for public data, **no query surface that could enumerate contributors or correlate compartments.**
+
+### Confidentiality posture — stated as a new risk class
+
+The permanent public archive **inverts** the platform's baseline "minimize retention / can't produce plaintext" posture, which is now scoped to **the vault only**. The public corpus is a **distinct, new risk class** whose safety rests on redaction + radioactive-classification recall against an evasive adversary — a probabilistic gate, not a guarantee. This is why permanence is earned per item by human attestation after probation, and why the purge-override supersedes every lock. The plaintext pHash / dedup index in D1 is **scoped to the public-admitted derivative set only** — fingerprints of SEALED_ONLY vault originals are **never** placed in compellable plaintext D1 (that would be a content-existence oracle over "unreadable" content). Honesty throughout: **"preservation supporting lawful processes, not an admissibility guarantee."**
+
+### Ruthless v1 scope (Session-3) vs. later
+
+**v1:** content-addressed public keys + exact-byte dedup (HEAD-before-PUT behind the §7.3 cohort/delay guard); image derivatives via `env.IMAGES` AVIF, video via Container with a cheap fast codec; probation window; fixed-duration Bucket Locks on both buckets (post-probation) + purge-override; ONE replication target (signed BagIt packs → one S3 store with object-lock, roots/manifests to IPFS); reuse §7.2 custody chain + daily jittered signed Merkle root anchored to OpenTimestamps; admission via §7.1 redaction + §7.4 Tier-0 + community verify; the eight contribution actions with blind-token weighting; append-only disputes.
+
+**Later:** perceptual near-dup clustering at scale, Cloudflare Workflows orchestration, deepfake advisory, chronolocation, C2PA validation, whole-archive IPFS/Filecoin, partner human-rights custodian (Mnemonic/Syrian-Archive model), Rekor, IA tiering, AV1 batch cold re-encode, compress-then-encrypt.
+
+---
+
+## 17. Infrastructure as Code & Operations (IaC)
+
+Modeled on the proven pattern in the reference app `madian/v2`. Governing rule: **anything that can be code is code; only what genuinely needs a human is in [RUNBOOK.md](./RUNBOOK.md).** Anything mutated outside the repo is unrecorded drift.
+
+### 17.1 Tooling & state
+- **OpenTofu** (`tofu`, ≥1.10) + **Cloudflare provider v5**. State in **R2** via the Terraform `s3` backend with `use_lockfile = true` (native state locking, no DynamoDB). `backend.hcl` is gitignored and rendered inline in CI; state-bucket auth is **R2 bucket-scoped keys** passed as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` — separate from the Cloudflare API token.
+- **Wrangler v4** deploys the Worker(s). One state-bucket bootstrap exception: `wrangler r2 bucket create harborage-tfstate` before Tofu exists.
+
+### 17.2 One writer per resource — the Terraform / Wrangler split
+OpenTofu owns account/zone resources; Wrangler owns the Worker and its bindings. Never two writers on one hostname.
+
+| Resource | OpenTofu (`infra/*.tf`) creates | Wrangler (`wrangler.jsonc`) binds/owns |
+|---|---|---|
+| D1 | the database | `d1_databases` binding (ID via CI `sed`); migrations via `wrangler d1 migrations apply --remote` |
+| R2 (vault / public-media / knowledge / archive / tfstate) | each `cloudflare_r2_bucket` + lifecycle + Bucket Locks (post-probation) | `r2_buckets` bindings by name |
+| KV (incl. `FLAGS`) | each namespace | `kv_namespaces` binding (ID via CI `sed`) |
+| Durable Objects | — | wrangler entirely: DO class bindings + `new_sqlite_classes` migrations |
+| Queues | `cloudflare_queue` (in state) | producer/consumer bindings |
+| Vectorize | — (`wrangler vectorize create` in bootstrap) | index binding |
+| Workers AI + AI Gateway | `cloudflare_ai_gateway` (rate limits, logging, caching) | `ai` binding; route model calls through the gateway |
+| Turnstile (per sensitive surface) | `cloudflare_turnstile_widget` | sitekey via build env; secret via `wrangler secret put` |
+| Cloudflare Access (privileged console) | org + IdP + policy + `access_application` (destinations = `/console*`, privileged API paths) | worker-side `jose` JWT re-verify (fail-closed) |
+| WAF / rate-limiting | `cloudflare_ruleset` (`http_ratelimit`, `http_request_firewall_custom`) | plus app-level RateLimit DO per sensitive endpoint |
+| Email | Email Routing rules + MX/DKIM/DMARC/SPF DNS (`prevent_destroy`) | `send_email` binding |
+| DNS / zone | everything **except** worker hostnames | apex/route hostnames via `routes … custom_domain: true` |
+
+`REPLACE_*` placeholders in `wrangler.jsonc` (D1 id, KV id, Access AUD, team domain, Turnstile sitekey) are injected in CI from `tofu output`. Never hardcode them. Mirror all bindings in a `worker-lib/types.ts` `Env` interface as the authoritative source of truth. Put `prevent_destroy` on anything whose loss is catastrophic (Email records, the Access application, the signing-key config).
+
+### 17.3 Deprivileged CI (the key security pattern)
+Two GitHub Actions workflows, `permissions: contents: read`, all actions pinned to full commit SHAs, deploys **CI-only** (no laptop deploys).
+- **`ci.yml`** (PR): install `--frozen-lockfile` → typecheck → build → **CI-as-enforcement gates** (§17.5) → `tofu plan` (shows the infra diff on every PR).
+- **`deploy.yml`** (push:main): job **`infra`** holds `HB_TERRAFORM_TOKEN`, runs `tofu apply`, exports resource IDs as outputs → job **`deploy`** (`needs: infra`) that **never receives the Terraform token** — it holds only the R2 state creds and the quarterly-rotated `HB_DEPLOY_TOKEN`, reads sensitive outputs from state with `tofu output -raw` + `::add-mask::`, `sed`s the wrangler config, deploys the Worker, runs `wrangler secret put`, applies D1 migrations, and smoke-tests (asserts `/console` is never 200 without Access). A protected GitHub `production` **environment** (required reviewer) is the whole approval surface; a shared `concurrency` group serializes Tofu.
+
+The token that can rewrite DNS and Access never enters the job that runs third-party (`pnpm`-installed) code.
+
+### 17.4 Kill switches, secrets, signing keys
+- **Kill-switch flags are runtime data, not IaC and not `wrangler vars`** (a var flip needs a redeploy — too slow to stop a live incident). Terraform creates the `FLAGS` KV namespace; the **FlagState DO** is the strongly-consistent source of truth with an append-only audit log (§10.3), fronted by a short-TTL KV/per-colo cache. Every high-risk feature reads its flag and **fails closed by default** (absent/unreachable ⇒ feature off). Flags are flipped instantly from the **Access-gated `/console`**, never through the deploy pipeline; heightened-threat is one composite flip.
+- **Runtime secrets** (Turnstile secret, API tokens, HMAC peppers) → GitHub Environment secrets → `wrangler secret put` in the deploy job. Never in the repo (`.dev.vars`, `.env*`, `backend.hcl`, `terraform.tfvars` all gitignored).
+- **Signing keys generated offline never enter CI or Terraform.** Only the *public* verification key ships (committed / wrangler var). Private keys live in an offline vault, used only during the m-of-n ceremony (RUNBOOK).
+- **No auth-bypass code path ever ships.** Do not port `madian`'s `ADMIN_DEV_BYPASS` / `DEV_FAKE_AI` escape hatches — use a local mock Access issuer so there is no bypass that could reach production.
+
+### 17.5 CI-as-enforcement gates (encode invariants as build gates, not review etiquette)
+The build **fails** if any of these trip:
+- **No-AI-tells / plain-language gate** — reject the banned copy patterns (em-dash `U+2014` in shipped UI strings, the CLAUDE.md ban list) in built output and message catalogs.
+- **Strict CSP + Trusted Types gate** — nonce-based CSP (no inline/eval), `Trusted Types`, security-header baseline enforced in the web Worker and verified in CI (hash the SvelteKit bundle + any inline theme/FOUC script). For a browser-crypto PWA an XSS equals the top-tier code-injection threat; Svelte auto-escaping is not sufficient.
+- **`safeLog` gate** — lint bans raw `console.*`; assert sensitive field names never appear at call sites.
+- **Memory-only invariant test** — fails if LiveBoard/Broker/RateLimit/CIB/VerificationState hot-path code writes signal/location/timing/token→identity/pubkey fields to DO SQLite or D1.
+- **Sensitive-write-must-be-sealed test** — the intake Worker rejects any non-sealed body on a sensitive endpoint.
+- **Supply chain** — actions SHA-pinned (zizmor/ratchet), `--frozen-lockfile`, lifecycle scripts allow-listed, `harden-runner` egress-block, secret scanning + push protection, Dependabot never auto-merged, signed commits on `main`.
+
+### 17.6 DDoS, rate-limits, anti-replay, PWA cache safety
+- **Volumetric L7 DDoS** relies on Cloudflare's managed/unmetered rulesets; WAF custom-characteristic rate-limiting needs Business+, so the **RateLimit DO is the deliberate app-layer substitute** (per-cap-cert / per-ASN-bucket / global token buckets). Never rate-limit *reading* public safety info.
+- **PoP anti-replay:** per-request proof-of-possession binds a server-issued challenge or short-window timestamp + nonce; the api Worker rejects stale/seen nonces (bounded in the RateLimit/CIB memory DO).
+- **Service worker never caches privileged/console or sensitive responses** (`no-store`, excluded from the precache manifest). Locally cached data is sensitive-at-rest; panic/safe-mode clears caches + IndexedDB. Analytics default **off** on sensitive routes; no IP hash / no geo for at-risk users; the beacon never fires on privileged paths.
+
+### 17.7 Coordinated disclosure, incident response, warrant canary
+- **Coordinated disclosure + safe harbor:** publish `/.well-known/security.txt`; encrypted **identity-optional** intake (PGP/age or an onion drop, not email). De-anonymization / redaction-bypass / code-injection bugs are **P0** with an embargoed window; a sensitive field reaching logs is Sev-1. Stated safe-harbor commitment.
+- **Incident-response / continuity runbook** ([RUNBOOK.md](./RUNBOOK.md) Part C): (a) signing-key compromise → revocation epoch bump + peer-QR propagation (§5.5) + re-key ceremony; (b) breach → user notification via a **signed Official Notice** (§4.2) + canary shift (there is no directory/push/email channel); (c) forced takedown → non-CF mirror + fork continuity.
+- **Warrant canary:** human-produced, offline-minisign-signed, published to `/.well-known/canary.txt` with a hard expiry; signing stays manual/offline by design (automating it would let a compelled Cloudflare keep it alive). Missing/expired signature *is* the signal.
+
+### 17.8 Repo shape (monorepo)
+`pnpm` workspace, `--frozen-lockfile`, `engine-strict`. `apps/web` (SvelteKit PWA) + `apps/console` (Access-gated) · `packages/foundry` (CSS-token design system, §18) · `packages/worker-lib` (`access.ts` fail-closed JWT, `turnstile.ts`, `flags.ts`, crypto module, `types.ts` Env) · `infra/` (OpenTofu) · `migrations/` (D1 SQL) · `scripts/bootstrap.sh` (near-zero-manual bootstrap) · `.github/workflows/`. See [RUNBOOK.md](./RUNBOOK.md) for the minimal manual surface.
