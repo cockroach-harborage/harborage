@@ -100,6 +100,9 @@ Design rules for the incident object:
 | **Verified professional** (lawyer / doctor / journalist / medic) | Elevated trust for legal/medical/press work | In scope; ships **only** with a no-mapping / anonymous-credential verifier model (§12) — never a real-identity honeypot |
 | **Legal-aid coordinator / lawyer** | Detention response, case tracking | Most identifying data stays lawyer-side/off-platform; platform holds references/hashes |
 | **Accountability reviewer** | Adjudicate public official-misconduct records | Multi-person verification gate before any individual identity is published |
+| **Seeker** (public / affected / student / person with disabilities) | Find help fast; browse resources; ask privately | Zero-account browse of the public Directory (§14); private brokered ask when disclosing a need; accessibility-first |
+| **Volunteer / curator** | Add, verify, and maintain resources across cities | Pseudonymous, reputation-based; contributes through the autonomous trust pipeline; no volunteer roster |
+| **Provider / organisation** | Be found; offer a service | Consent-first Directory listing (§14) with a visibility tier and one-tap remove; individual helpers stay brokered (§4.9) |
 | **Contributor / maintainer** | Build safely | Threat-tiered review, signed commits, separation of duties |
 
 **Structural invariants across all roles:** no real-name/phone/email requirement; **no member directory or "list all users" capability anywhere**; no interpersonal follow graph; privileged surfaces sit behind Cloudflare Access with phishing-resistant (passkey/hardware) MFA, off the public app.
@@ -767,7 +770,7 @@ STAY SAFE  🛡️   (fully offline, no account)
 
 RECORD  📷   (evidence)
 ├─ New record → Add photo / write / record audio
-│            → Hide faces (draggable blur) + exact location removed
+│            → Hide faces (draggable cover) + exact location removed
 │            → Add what happened (optional)
 │            → Keep on phone (default) / Send to archive / Share with a legal partner
 └─ My records (on this phone only)   → feed [15] + [10] when sent
@@ -842,7 +845,7 @@ Every category row has an icon, a plain label, and (where audio exists) speaks a
 **D. Record an incident** (guided, easy to hide faces)
 1. 📷 tab → New record. One calm line: "This stays on your phone until you send it."
 2. Add a photo, write, or record audio. Exact location is removed on import.
-3. Hide faces: drag a blur box over each face or plate. Undo is always there. Plain confirm: "Exact location removed."
+3. Hide faces: drag a solid cover box over each face or plate. Undo is always there. Plain confirm: "Exact location removed."
 4. Add what happened (optional).
 5. Choose: **Keep on phone** (default), Send to the archive, or Share with a legal partner. You can send later.
 
@@ -948,7 +951,7 @@ The chip shows the **short word first,** at chip size. The full sentence sits be
 
 **Quick-exit and discreet mode (safety, not gimmick).** The default app already looks ordinary: plain name, no slogans, no flags, no fists. **No fake calculator.** A discovered costume is a worse tell than an ordinary-looking civic app, and a PWA cannot reliably swap its icon or control the recent-apps thumbnail, so we do not promise those. Quick-exit is a plain **"Close"** control, top-right on every screen, that in one tap clears sensitive view state and drops the user on the neutral Directory view. Discreet mode (in Settings, off by default) tones the accent down and keeps sensitive text out of previews. Notifications never carry sensitive content, ever, lock-screen safe by design.
 
-**Honest limits, stated in copy and docs.** Device-local storage does not protect records against someone who takes and unlocks the phone. Say so. Day 1 scopes evidence to **photo, text, and audio** with a manual draggable blur and EXIF strip. **We do not blur faces in video** and do not claim to; the copy warns "We can't hide faces in video yet. Film carefully." Auto face-detection is later polish, gated on device capability.
+**Honest limits, stated in copy and docs.** Device-local storage does not protect records against someone who takes and unlocks the phone. Say so. Day 1 scopes evidence to **photo, text, and audio** with a manual draggable solid cover and EXIF strip. **We do not cover faces in video** and do not claim to; the copy warns "We can't hide faces in video yet. Film carefully." Auto face-detection is later polish, gated on device capability.
 
 ---
 

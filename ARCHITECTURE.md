@@ -922,7 +922,7 @@ The permanent public archive **inverts** the platform's baseline "minimize reten
 Modeled on the proven pattern in the reference app `madian/v2`. Governing rule: **anything that can be code is code; only what genuinely needs a human is in [RUNBOOK.md](./RUNBOOK.md).** Anything mutated outside the repo is unrecorded drift.
 
 ### 17.1 Tooling & state
-- **OpenTofu** (`tofu`, ≥1.10) + **Cloudflare provider v5**. State in **R2** via the Terraform `s3` backend with `use_lockfile = true` (native state locking, no DynamoDB). `backend.hcl` is gitignored and rendered inline in CI; state-bucket auth is **R2 bucket-scoped keys** passed as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` — separate from the Cloudflare API token.
+- **OpenTofu** (`tofu`, **≥1.12** — 1.11.x is EOL 2026-08-01) + **Cloudflare provider `~> 5.22`**. State in **R2** via the Terraform `s3` backend with `use_lockfile = true` (native state locking, no DynamoDB). `backend.hcl` is gitignored and rendered inline in CI; state-bucket auth is **R2 bucket-scoped keys** passed as `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` — separate from the Cloudflare API token.
 - **Wrangler v4** deploys the Worker(s). One state-bucket bootstrap exception: `wrangler r2 bucket create harborage-tfstate` before Tofu exists.
 
 ### 17.2 One writer per resource — the Terraform / Wrangler split
@@ -979,3 +979,54 @@ The build **fails** if any of these trip:
 
 ### 17.8 Repo shape (monorepo)
 `pnpm` workspace, `--frozen-lockfile`, `engine-strict`. `apps/web` (SvelteKit PWA) + `apps/console` (Access-gated) · `packages/foundry` (CSS-token design system, §18) · `packages/worker-lib` (`access.ts` fail-closed JWT, `turnstile.ts`, `flags.ts`, crypto module, `types.ts` Env) · `infra/` (OpenTofu) · `migrations/` (D1 SQL) · `scripts/bootstrap.sh` (near-zero-manual bootstrap) · `.github/workflows/`. See [RUNBOOK.md](./RUNBOOK.md) for the minimal manual surface.
+
+---
+
+## 18. Final Pre-Build Reconciliation, M0 Manifest & Freshness (Session 2.6)
+
+A final solidity pass confirmed the plan **only grew** — no capability was dropped, no primitive downgraded. This section is the authoritative reconciliation for the build: **where earlier sections conflict with this one, this one wins.** It exists because the Session-2.5 layer was added on top of §1–13 rather than rewriting it, so some older text still describes the pre-pivot system.
+
+### 18.1 Reconciliations (these override earlier text)
+
+- **The AI + community trust engine is DAY-1 CORE, not deferred.** Every "deferred / optional / AI = later" statement (§2 row 11, §3.1 diagram, §4.4, §7.4, §12 M5) is superseded by §15. What is deferred is **scale/tuning**, never the engine. Build order for it: the **trust floor** (default `Unverified`, chronological, never amplified, + Tier-0 tripwires + hide-pending + human-console queue) at **M2**; the **corroboration-reach machinery** (Community-Corroborated up-ranking, √-damped reputation, CIB, cohort-pivot) at **M3**, tuned against live abuse + a load harness. The AI resources (AI Gateway, Workers AI, Vectorize, `SpendCapDO`) are **provisioned day-1 but flag-gated** behind the spend-cap + degrade ladder. Safety lives in the floor, so this loses nothing.
+- **Public verification labels are the four plain words only** (PRD §15 is the UX authority): "Verified by our team" / "Confirmed by people nearby" / "Not checked yet" / "Reported as a problem". The internal 8-state machine (§15) maps to them: `Human-Verified`→team; `Community-Corroborated`→people nearby; `Unverified`/`AI-Screened`→not checked yet; `Disputed`/`Debunked`→reported/hidden. **No "AI-checked" string ever reaches a user;** the honest "automated, can be wrong" wording lives on tap-through only. Delete "AI-checked (automated)" from every public badge (this corrects §15 and the CLAUDE Trust & Safety block).
+- **Verification vocabulary:** the old 5-state list (PRD §2, §6) is replaced by a pointer to the §15 canonical machine. Correct "Verified travels with every incident" → the autonomous ceiling is `Community-Corroborated`; only human review confers `Human-Verified`.
+- **Moderation posture (inline, not just the banner):** reversible moderation (label / rank / hide-pending / retain-pending) is **autonomous day-1** (§15). The human org is a **hardening** milestone; only the irreversible m-of-n gates (individual naming, unredaction, precise-location reveal, permanent deletion) need it and ship **OFF**. This corrects "a human decides every removal/verify" in PRD §6/§4.11/§8/§11 and ARCH §11 row 13.
+- **Redaction wording:** the tool is **"cover / solid box"** — irreversible solid-fill. The word **"blur" is banned** in all user copy and docs (blur is partly reversible). Fix every "blur" in UX copy to "cover".
+- **Facilities are `PUBLIC_INFRA` rows in `resource_entries`** (PRD §14), served from the Cron-materialized directory rollup. Drop the separate "FacilitiesDO/D1" in §6.1; the only retained live-board invariant is **physical segregation from density signals**. Restore the in-action path: a **"Facilities near me"** surface on the **Nearby** tab (coarse-geo `PUBLIC_INFRA` query, ≤2 taps) so a protestor mid-action still finds toilets/water/charging fast.
+- **R2 = 3 content buckets + 1 state bucket:** `evidence-vault`, `public-media`, `knowledge`, plus `harborage-tfstate`. There is **no 4th `archive` bucket** — archive derivatives live in `public-media`, sealed originals in `evidence-vault` (§16). Corrects §17.2.
+- **One name for the CIB Durable Object:** `CoordinationWindowDO` everywhere (corrects "CIB window" in §3.2/§10.3/§17.5/CLAUDE).
+- **Memory-only CI gate is two gates** (§17.5): *wholly-memory classes* (no `ctx.storage` write at all: LiveBoard, Broker, RateLimit, CoordinationWindow) vs *field-forbidden classes* (`VerificationStateDO` is SQLite but must never store signal/location/timing/token→identity/pubkey fields).
+- **No user-facing email path (invariant guard).** Cloudflare Email Sending is operator/console-side only. Auth, recovery, and user notifications must **never** use email — that would breach the no-email / no-member-directory / content-free-notification invariants. Corrects the §14 Email bullet.
+- **Personas:** add **seeker** (incl. students, persons with disabilities), **volunteer/curator**, **provider/org** to PRD §3 (they were modeled in §14 but missing from the §3 table). All are client-held lenses, zero-account browse, no role registry.
+- **Duress/decoy** (BIP39 passphrase → decoy tree, §5.2) gets an explicit Settings → safe-mode entry in the UX so it is not silently dropped at build.
+
+### 18.2 Build-vs-switch-on (removes all Session-3 scope ambiguity)
+
+Session 3 **builds the full milestone code behind fail-closed flags.** The human/legal gates (offshore entity, counsel sign-off, offline key ceremony, crypto audit, staffed human org, off-platform custodians) govern only the **flip**, never the build. So every milestone row has two gates: *buildable now* (always yes for the code) and *blocks switch-on* (the human/legal gate). A builder is never blocked from writing a feature; they are blocked only from turning it on.
+
+### 18.3 M0 Resource Manifest (the first Session-3 deliverable — before code)
+
+Author this table first; it drives `wrangler.jsonc`, `infra/*.tf`, and a `worker-lib/types.ts` `Env` that matches 1:1.
+
+- **Durable Objects:** `LiveBoard` (memory), `Broker`/`Mailbox` (memory + R2 ciphertext), `RateLimit` (memory), `CoordinationWindow` (memory, CIB), `FlagState` (SQLite, audit), `NoticeLog` (SQLite, hash-chain), `ReviewGate` (SQLite), `DeadlineTimer` (SQLite, alarms), `VerificationState` (SQLite, field-forbidden), `SpendCap` (SQLite, Neuron counter), `ReReviewQueue` (SQLite), `CustodyChain` (SQLite, archive hash-chain), `CurationCoordinator` (SQLite, directory triage). Wrangler owns all DO bindings + `new_sqlite_classes` migrations.
+- **D1 tables** (single DB, every filter column indexed): `incidents`, `evidence_refs`, `verification_states`, `accountability_records`, `legal_matter_refs`, `notices`, `notice_chain`, `key_directory`, `revocation_list`, `reputation_scalars`, `perceptual_hashes` (public-derivative only), `resource_entries` (DIR-1/DIR-2 columns absent by design), `skills_registry` (brokered helpers — **not browsable**), `archive_items`, `archive_provenance`, `archive_disputes`, `feature_flag_audit`, `mod_audit`. No member/user table, no social/vouch graph, no who-was-where table.
+- **R2:** `evidence-vault`, `public-media`, `knowledge` (+ `harborage-tfstate`).
+- **KV:** `FLAGS`, `CONFIG`, `I18N`, `RULESETS`, `KEYDIR_CACHE`.
+- **Queues:** `moderation-bulk` (+ DLQ), `life-safety` (reserved concurrency, + DLQ).
+- **Vectorize:** one index, `embeddinggemma-300m` 768-dim (immutable at creation).
+
+### 18.4 Freshness updates (re-verified today; §14 remains otherwise accurate)
+
+- **OpenTofu ≥ 1.12** (1.11.x EOL 2026-08-01 — inside the build window). §17.1.
+- **Cloudflare Terraform provider `~> 5.22`** (pin the minor). §17.1.
+- **`shamir-secret-sharing` (privy) → `0.0.4`** (exact pin, not `latest`). §14.
+- **`@inlang/paraglide-js` 2.22.0** (caret `^2.20.x` unchanged; note bump). §14.
+- **OpenTimestamps (the one genuine unpinned hole):** `opentimestamps@0.4.9` is ~5 yr old / unmaintained. Either pin it with a "builds under Vite 8 / Node 22 ESM" CI gate, adopt the maintained `@lacrypta/typescript-opentimestamps`, or mark archive OTS-anchoring **build-vs-defer**. Add to §14 pins + §16.
+- **New Cloudflare capabilities to adopt** (all confirmed GA, currently under-used): **Access Independent MFA** with `security_key` **AAGUID-restricted** to project-issued authenticators on `/console*` (§9.5, §17.2); **DO Memory-Usage metrics** — alarm on `memoryUsageBytesP99` per memory-only DO + a byte-threshold shard-out trigger (memory-only DOs can hit silent `Exceeded Memory` at surge) (§3.2, §10.5); **Queues `metrics()`** — the life-safety queue pages the operator when `oldestMessageTimestamp` exceeds N seconds (§3.1); **Container active-CPU-second billing + custom instance types** — transcode/pHash is materially cheaper than the prior estimate; size a custom instance rather than over-provisioning (§16).
+- **Precision notes:** AI Gateway Guardrails — soften "GA; Hindi supported" to "available; confirm GA + hi coverage at switch-on; the Tier-0 floor does not depend on it." Queues 5,000 msg/s is the **pull-consumer** ceiling; size the protest-day drain off **250 push-concurrency × batch**. `llama-guard-3-8b` is still current (no Llama-Guard-4). Keep Capacitor 8 (9 is alpha).
+
+### 18.5 Gaps to close in Session 3 (P1 before bulk code, P2 soon)
+
+- **P1 — M0 resource manifest** (§18.3) authored first. **P1 — seed-content pipeline:** `content/{directives,kyr,crisis-cards,directory-seed}/` source format, two-person review record, **named human owners** (legal reviewer, medic reviewer, en/hi translators, m-of-n signers), and the signed `.harborage-pack` build step — without these, M1 ships a shell with nothing to sign. **P1 — D1 backup/DR:** periodic **signed export of public-plaintext tables** → `knowledge` bucket + non-CF mirror + a restore-into-fresh-account procedure (account termination is a named threat; E2E/off-platform classes excluded by construction). **P1 — foundry design-token package** (`packages/foundry`): `tokens.css` + build + an AA-contrast CI gate, consumed by `apps/web` + `apps/console` (repoint §17.8 to PRD §15 tokens).
+- **P2** — trust-engine conformance tests (state machine, Sybil/CIB simulation, reach-table conformance, "flag-storm can't bury truth", "mob can't cheaply verify", and a guard that the fixed action-enum has no code path to publish/delete/unredact/name); a **pixel-level test that the public derivative never contains the vault original's bytes**; a **protest-day load harness** (k6/artillery for LiveBoard HLL ingest, Queue drain under surge, SpendCap under flood); a **privacy-safe war-room dashboard** (queue backlog, SpendCap %, error rate, DO P99 memory, per-colo flag-flip latency) via Analytics Engine aggregate counts only — no per-identity/IP/geo; a concrete **Capacitor APK milestone before M3** (M3 capture tier + M5 reviewer naming depend on it); Paraglide 2.x inlang layout + the no-AI-tells ICU gate + "safety strings never machine-translated, named-reviewer record" enforcement; document the native-R2-presign fallback for maintenance-mode `aws4fetch`.
