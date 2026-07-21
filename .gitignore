@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+.svelte-kit/
+.wrangler/
+.vercel/
+*.tsbuildinfo
+
+# secrets & local config — NEVER commit
+.env
+.env.*
+!.env.*.example
+.dev.vars
+.dev.vars.*
+*.tfvars
+!*.tfvars.example
+backend.hcl
+!backend.hcl.example
+.env.bootstrap
+!.env.bootstrap.example
+
+# terraform / opentofu state
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# offline signing / private keys — never in the repo
+*.key
+*.pem
+*.p12
+secrets/
+
+# local tooling & os
+.claude/
+.DS_Store
+*.log
+coverage/
