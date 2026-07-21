@@ -8,6 +8,8 @@ The whole manual surface is small: mint tokens, click a few one-time dashboard a
 
 ## Part A — One-time bootstrap (ordered)
 
+0. **Add the production domain as a Cloudflare zone.** The domain is `cockroachharborage.org` (registered 2026-07-22). If it was bought via Cloudflare Registrar the zone already exists; otherwise add the site in the dashboard and point the registrar's nameservers at Cloudflare. The zone name is supplied to IaC via `terraform.tfvars` (gitignored) — never hardcoded. *(GitHub remote: `cockroach-harborage/harborage`, created in Session 3 via `gh repo create`; branch protection + `production` environment are applied by script, recorded here because repo creation itself is a one-time act.)*
+
 1. **Mint scoped Cloudflare API tokens in the dashboard** — the API cannot self-bootstrap tokens. Create three, scoped by blast radius:
    - `HB_TERRAFORM_TOKEN` — DNS Edit, Zone Settings, Access (apps/policies/orgs/IdPs), Account Rulesets/WAF, D1, KV, R2, Queues, Turnstile, AI Gateway, Email Routing. Used only in the CI `infra` job.
    - `HB_DEPLOY_TOKEN` — Workers Scripts/Routes Edit, D1, KV, R2, Queues, Workers AI. Used only in the CI `deploy` job. **Rotate quarterly** (Part B).

@@ -584,7 +584,7 @@ Ordered most load-bearing first. Includes all OUTDATED / INCORRECT findings plus
 - **Queues on Free plan + `env.QUEUE.metrics()` (2026-02 / 2026-04)** — Realtime `{backlogCount, backlogBytes, oldestMessageTimestamp}`; Queues now on Free (24h retention); configurable `message_retention_period` (60s–14d). *Change:* adopt `metrics()` for backlog-based autoscaling/alerting; set an explicit retention period.
 - **DO 2026 additions** — **Data Studio** (view/edit DO SQLite without deploying a Worker), **Container-backed DOs** (Linux sidecar as the escape hatch beyond 128 MB), **Memory Usage metrics** (P50–P999 vs the 128 MB ceiling), **`us`/`eu` jurisdiction pinning + `ctx.id.jurisdiction`** for data residency, **32 MiB WebSocket messages**. *Change:* alarm on P99 memory; use Data Studio for CIB/audit debugging; adopt jurisdiction pinning if residency matters; a Container-backed DO is the growth path, not a bigger isolate.
 - **Smart Placement hints + `run_worker_first` route arrays** — Smart Placement is now sticky (won't revert on traffic dips) and supports explicit `placement.region`/`host`/`hostname` hints; `run_worker_first` accepts an array of glob/`!`-negated route patterns (Wrangler ≥4.20, Vite plugin ≥1.7). *Change:* if there's a fixed regional origin, set an explicit `placement.region`; run the SvelteKit worker only on `/api/*` while serving the SPA shell directly.
-- **Offline PWA service worker** — Prefer **`@vite-pwa/sveltekit`** (Workbox precache + auto SW; set `serviceWorker.register=false` in `svelte.config.js`) over a fully hand-rolled worker; SvelteKit's built-in `$service-worker` remains the zero-dep fallback.
+- **Offline PWA service worker** — **Decision (Session 3, 2026-07-22):** use SvelteKit's built-in `$service-worker` (zero-dep, small enough to audit line-by-line, and the natural hook for the signed `{path:sha256}` manifest verification the SW must eventually enforce — a Workbox-generated worker would fight that). `@vite-pwa/sveltekit` remains the documented alternative if Workbox-only features are ever needed.
 - **Turnstile new modes** — `execution:'execute'` + `appearance:'interaction-only'` defers the challenge to submit-time (most users never see it); `size:'flexible'` for responsive PWA layout. Use a Svelte-native client SDK (below).
 - **Shamir Secret Sharing** — Adopt Privy's audited (Cure53 + Zellic) `shamir-secret-sharing` for m-of-n key backup. No audited SLIP-39 JS lib exists — treat SLIP-39 as build-vs-defer.
 - **FROST(ed25519) now exists** — `@noble/curves` 2.x ships an RFC 9591 FROST implementation (`ed25519_FROST`). Keep threshold-Ed25519 deferred for production (maintainer flags it **unaudited**) but reference it as the concrete future path.
@@ -630,6 +630,7 @@ Ordered most load-bearing first. Includes all OUTDATED / INCORRECT findings plus
 | syft | `v1.48.0` | Emit CycloneDX 1.7; attest SBOM. |
 | grype | latest | Pair with syft for CVE scan. |
 | @cyclonedx/cyclonedx-npm | `6.0.0` | CycloneDX 1.7; cdxgen 12.1.4 for multi-lang, cyclonedx-cli for merge. |
+| OpenTimestamps client | **deferred — no pin** | Resolved 2026-07-22 (§18.4): both `opentimestamps@0.4.9` (~5 yr stale) and `@lacrypta/typescript-opentimestamps@0.1.0` (~2 yr stale) are unmaintained. Archive OTS anchoring is M3; the client-library decision is re-taken at M3 switch-on (vendor, or a minimal in-house stamp submitter). See §16. |
 
 ### Confirmed (no change)
 
@@ -922,7 +923,7 @@ A **multi-party, logged short-purge override authority supersedes every lock and
 
 - **Per-object SHA-256** = the public key (any change is visible).
 - **Append-only custody hash-chain** (per item, in a Durable Object): each event (`ingest`, `redact`, `admit`, `probation-clear`, `lock`, `replicate`, `dispute`, `tombstone`) records `record_hash = SHA256(prev_hash ‖ canonical(record))`. Schema is fixed and carries **no deanonymizing fields** (no IP, no device, no real name; actor = pseudonymous role/band only).
-- **Batched, jittered Merkle checkpoints → OpenTimestamps (primary).** A daily-minimum, **coarse, jittered** signed Merkle root is anchored to **OpenTimestamps** (Bitcoin-anchored, free, jurisdiction-independent); Rekor optional/secondary. **Never hourly, never per-ingest, never per-item timestamps externally** — that is a contributor-deanonymization timing oracle against singleton submitters. An item enters a checkpoint only after it joins a cohort ≥K or a randomized delay elapses (reuse the §7.3 low-popularity cohort guard for checkpoint inclusion). Only **roots** leave Cloudflare.
+- **Batched, jittered Merkle checkpoints → OpenTimestamps (primary).** A daily-minimum, **coarse, jittered** signed Merkle root is anchored to **OpenTimestamps** (Bitcoin-anchored, free, jurisdiction-independent); Rekor optional/secondary. **Never hourly, never per-ingest, never per-item timestamps externally** — that is a contributor-deanonymization timing oracle against singleton submitters. An item enters a checkpoint only after it joins a cohort ≥K or a randomized delay elapses (reuse the §7.3 low-popularity cohort guard for checkpoint inclusion). Only **roots** leave Cloudflare. *Build-vs-defer (resolved 2026-07-22): no maintained JS OTS client exists (§14 pins) — checkpoint OTS anchoring is built at M3 behind a flag, and the client-library choice (vendor vs a minimal in-house stamp submitter) is re-taken then. The Merkle/custody chain itself is unaffected.*
 - A **static inclusion-proof verifier** in the public archive lets any third party check an object's hash → custody record → Merkle path → external anchor, without trusting Harborage.
 
 ### Storage optimization (eat R2 no more than extremely necessary), integrity intact
@@ -1060,7 +1061,7 @@ The build **fails** if any of these trip:
 - **Warrant canary:** human-produced, offline-minisign-signed, published to `/.well-known/canary.txt` with a hard expiry; signing stays manual/offline by design (automating it would let a compelled Cloudflare keep it alive). Missing/expired signature *is* the signal.
 
 ### 17.8 Repo shape (monorepo)
-`pnpm` workspace, `--frozen-lockfile`, `engine-strict`. `apps/web` (SvelteKit PWA) + `apps/console` (Access-gated) · `packages/foundry` (CSS-token design system, §18) · `packages/worker-lib` (`access.ts` fail-closed JWT, `turnstile.ts`, `flags.ts`, crypto module, `types.ts` Env) · `infra/` (OpenTofu) · `migrations/` (D1 SQL) · `scripts/bootstrap.sh` (near-zero-manual bootstrap) · `.github/workflows/`. See [RUNBOOK.md](./RUNBOOK.md) for the minimal manual surface.
+`pnpm` workspace, `--frozen-lockfile`, `engine-strict`. `apps/web` (SvelteKit PWA) + `apps/console` (Access-gated) · `workers/api` + `workers/media` (M1) + `workers/consumer` (M2) · `packages/crypto` (**the** frozen CODEOWNERS-guarded crypto module, §5 — importable by client and workers, hence its own package rather than living inside worker-lib) · `packages/worker-lib` (`access.ts` fail-closed JWT, `turnstile.ts`, `flags.ts`, `safeLog`, `types.ts` Env) · `packages/foundry` (CSS-token design system, §18) · `packages/outbox` (encrypted outbox + resumable-multipart state machine, §19) · `content/` (directives/kyr/crisis-cards/directory-seed sources + review records) · `infra/` (OpenTofu) · `migrations/` (D1 SQL + `inverse/`) · `tools/gates/` (CI-as-enforcement gate scripts, §17.5) · `scripts/bootstrap.sh` (near-zero-manual bootstrap) · `.github/workflows/`. See [RUNBOOK.md](./RUNBOOK.md) for the minimal manual surface.
 
 ---
 
@@ -1088,16 +1089,48 @@ A final solidity pass confirmed the plan **only grew** — no capability was dro
 
 Session 3 **builds the full milestone code behind fail-closed flags.** The human/legal gates (offshore entity, counsel sign-off, offline key ceremony, crypto audit, staffed human org, off-platform custodians) govern only the **flip**, never the build. So every milestone row has two gates: *buildable now* (always yes for the code) and *blocks switch-on* (the human/legal gate). A builder is never blocked from writing a feature; they are blocked only from turning it on.
 
-### 18.3 M0 Resource Manifest (the first Session-3 deliverable — before code)
+### 18.3 M0 Resource Manifest (authored 2026-07-22 — drives `wrangler.jsonc`, `infra/*.tf`, and the `packages/worker-lib` `Env` 1:1)
 
-Author this table first; it drives `wrangler.jsonc`, `infra/*.tf`, and a `worker-lib/types.ts` `Env` that matches 1:1.
+Production zone: `cockroachharborage.org` (value flows via `terraform.tfvars`, never hardcoded). Console: `console.cockroachharborage.org`.
 
-- **Durable Objects:** `LiveBoard` (memory), `Broker`/`Mailbox` (memory + R2 ciphertext), `RateLimit` (memory), `CoordinationWindow` (memory, CIB), `FlagState` (SQLite, audit), `NoticeLog` (SQLite, hash-chain), `ReviewGate` (SQLite), `DeadlineTimer` (SQLite, alarms), `VerificationState` (SQLite, field-forbidden), `SpendCap` (SQLite, Neuron counter), `ReReviewQueue` (SQLite), `CustodyChain` (SQLite, archive hash-chain), `CurationCoordinator` (SQLite, directory triage). Wrangler owns all DO bindings + `new_sqlite_classes` migrations.
-- **D1 tables** (single DB, every filter column indexed): `incidents`, `evidence_refs`, `verification_states`, `accountability_records`, `legal_matter_refs`, `notices`, `notice_chain`, `key_directory`, `revocation_list`, `reputation_scalars`, `perceptual_hashes` (public-derivative only), `resource_entries` (DIR-1/DIR-2 columns absent by design), `skills_registry` (brokered helpers — **not browsable**), `archive_items`, `archive_provenance`, `archive_disputes`, `feature_flag_audit`, `mod_audit`. No member/user table, no social/vouch graph, no who-was-where table.
-- **R2:** `evidence-vault`, `public-media`, `knowledge` (+ `harborage-tfstate`).
-- **KV:** `FLAGS`, `CONFIG`, `I18N`, `RULESETS`, `KEYDIR_CACHE`.
-- **Queues:** `moderation-bulk` (+ DLQ), `life-safety` (reserved concurrency, + DLQ).
-- **Vectorize:** one index, `embeddinggemma-300m` 768-dim (immutable at creation).
+**Workers** (purpose-scoped; one writer per resource):
+
+| Worker | Purpose | Route | First ships |
+|---|---|---|---|
+| `web` | SvelteKit SSR + Static Assets (app shell, PWA) | apex (custom_domain) | **M0** |
+| `console` | Privileged surface behind Access + HW-MFA; flag admin | `console.` subdomain | **M0** (stub + FlagState) |
+| `api` | Pseudonymous writes; sealed-envelope enforcement; hosts most DOs | `/api/*` | M1 |
+| `media` | Presigned multipart R2 URLs (aws4fetch); bytes never proxy | `/media/*` | M1 |
+| `consumer` | Queue consumer (Tier-0 triage, fan-out); DLQ mandatory | no route | M2 |
+
+**Durable Objects** (Wrangler owns all bindings + `new_sqlite_classes` migrations; cross-script via `script_name`; alarm on `memoryUsageBytesP99` per memory-only class from M2):
+
+| Class | Storage model | CI invariant class | Host script | Milestone |
+|---|---|---|---|---|
+| `FlagState` | SQLite (append-only audit) | — | `console` | **M0** |
+| `NoticeLog` | SQLite (hash-chain) | — | `console` | M1 |
+| `CurationCoordinator` | SQLite (directory triage) | — | `console` | M1 |
+| `ReviewGate` | SQLite | — | `console` | M5 |
+| `RateLimit` | **memory-only** (token buckets, PoP nonces) | wholly-memory | `api` | M1 |
+| `VerificationState` | SQLite, **field-forbidden** | field-forbidden | `api` | M2 |
+| `SpendCap` | SQLite (Neuron counter, degrade ladder) | — | `api` | M2 |
+| `ReReviewQueue` | SQLite | — | `api` | M2 |
+| `CoordinationWindow` | **memory-only** (CIB, alarm-purged) | wholly-memory | `api` | M3 |
+| `CustodyChain` | SQLite (archive hash-chain) | — | `api` | M3 |
+| `Broker` / `Mailbox` | **memory-only** routing + R2 ciphertext | wholly-memory | `api` | M4 |
+| `LiveBoard` | **memory-only** (HLL shards + aggregator) | wholly-memory | `api` | M5 |
+| `DeadlineTimer` | SQLite (alarms, content-free payloads) | — | `api` | M5 |
+
+**D1** — single DB `harborage`, created by Tofu at M0; every filter column indexed; tables ship with feature migrations (forward-only, expand→deploy→contract, pre-authored inverses): `feature_flag_audit` (**M0**); `notices`, `notice_chain`, `key_directory`, `revocation_list`, `resource_entries` (DIR-1/DIR-2 columns absent by design), `incidents`, `evidence_refs` (M1); `verification_states`, `reputation_scalars`, `mod_audit` (M2); `perceptual_hashes` (public-derivative only), `archive_items`, `archive_provenance`, `archive_disputes` (M3); `skills_registry` (brokered helpers — **not browsable**) (M4); `accountability_records`, `legal_matter_refs` (M5). No member/user table, no social/vouch graph, no who-was-where table — enforced by schema absence + a CI grep gate on `migrations/**`.
+
+**R2** (Tofu creates + CORS + lifecycle; Wrangler binds by name; no 4th archive bucket): `harborage-evidence-vault` (**M0**: CORS exposing `ETag` + PUT/POST from app origin — the §19 deliverable; incomplete-MPU lifecycle 30 days; opaque ULID keys; ciphertext only), `harborage-public-media` (**M0**: same CORS; content-addressed `sha256/<hh>/<hash>` keys), `harborage-knowledge` (**M0**: signed packs + signed D1 public-table backup exports), `harborage-tfstate` (bootstrap, bucket-scoped keys). Bucket Locks stay counsel-gated post-probation (§16).
+
+**KV:** `FLAGS` (**M0**, fail-closed reads, 5–10 s TTL cache of FlagState), `CONFIG` (**M0**), `I18N` (M1), `KEYDIR_CACHE` (M1), `RULESETS` (M2).
+**Queues** (provisioned M0): `moderation-bulk` + DLQ (consumer M2); `life-safety` + DLQ (consumer M4; reserved concurrency; page operator on `metrics().oldestMessageTimestamp`).
+**Vectorize:** `harborage-embeddings`, **768-dim** cosine (`@cf/google/embeddinggemma-300m`), created in bootstrap (dimension immutable). Used M3.
+**AI Gateway:** `harborage-gw` (Tofu) fronting Workers AI `llama-guard-3-8b`; behind SpendCap + degrade ladder; flag-gated OFF.
+**Turnstile:** widgets per sensitive surface (Tofu), first at M1 intake.
+**Access:** one application for the console hostname — passkey/FIDO2 only, Independent MFA `security_key` AAGUID-pinned, `prevent_destroy`. **M0**.
 
 ### 18.4 Freshness updates (re-verified today; §14 remains otherwise accurate)
 
@@ -1105,7 +1138,7 @@ Author this table first; it drives `wrangler.jsonc`, `infra/*.tf`, and a `worker
 - **Cloudflare Terraform provider `~> 5.22`** (pin the minor). §17.1.
 - **`shamir-secret-sharing` (privy) → `0.0.4`** (exact pin, not `latest`). §14.
 - **`@inlang/paraglide-js` 2.22.0** (caret `^2.20.x` unchanged; note bump). §14.
-- **OpenTimestamps (the one genuine unpinned hole):** `opentimestamps@0.4.9` is ~5 yr old / unmaintained. Either pin it with a "builds under Vite 8 / Node 22 ESM" CI gate, adopt the maintained `@lacrypta/typescript-opentimestamps`, or mark archive OTS-anchoring **build-vs-defer**. Add to §14 pins + §16.
+- **OpenTimestamps (the one genuine unpinned hole):** `opentimestamps@0.4.9` is ~5 yr old / unmaintained. Either pin it with a "builds under Vite 8 / Node 22 ESM" CI gate, adopt the maintained `@lacrypta/typescript-opentimestamps`, or mark archive OTS-anchoring **build-vs-defer**. **Resolved (Session 3, 2026-07-22): build-vs-defer** — the `@lacrypta` alternative turned out equally stale (0.1.0, ~2 yr unpublished), so OTS anchoring is deferred to M3 behind a flag; recorded in §14 pins + §16.
 - **New Cloudflare capabilities to adopt** (all confirmed GA, currently under-used): **Access Independent MFA** with `security_key` **AAGUID-restricted** to project-issued authenticators on `/console*` (§9.5, §17.2); **DO Memory-Usage metrics** — alarm on `memoryUsageBytesP99` per memory-only DO + a byte-threshold shard-out trigger (memory-only DOs can hit silent `Exceeded Memory` at surge) (§3.2, §10.5); **Queues `metrics()`** — the life-safety queue pages the operator when `oldestMessageTimestamp` exceeds N seconds (§3.1); **Container active-CPU-second billing + custom instance types** — transcode/pHash is materially cheaper than the prior estimate; size a custom instance rather than over-provisioning (§16).
 - **Precision notes:** AI Gateway Guardrails — soften "GA; Hindi supported" to "available; confirm GA + hi coverage at switch-on; the Tier-0 floor does not depend on it." Queues 5,000 msg/s is the **pull-consumer** ceiling; size the protest-day drain off **250 push-concurrency × batch**. `llama-guard-3-8b` is still current (no Llama-Guard-4). Keep Capacitor 8 (9 is alpha).
 
