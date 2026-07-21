@@ -47,3 +47,6 @@ test-results/
 
 # generated i18n runtime
 apps/web/src/lib/paraglide/
+
+# infra local artifacts
+infra/.snapshots/

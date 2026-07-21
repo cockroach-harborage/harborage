@@ -1,0 +1,9 @@
+# Rendered by scripts/bootstrap.sh into terraform.tfvars (gitignored).
+account_id = "<CLOUDFLARE_ACCOUNT_ID>"
+zone_name  = "cockroachharborage.org"
+
+admin_emails = ["admin@example.org"]
+
+# GitHub OAuth app for the Access IdP (console admins). Secret comes from the
+# GitHub Environment secret in CI (TF_VAR_github_idp_client_secret).
+github_idp_client_id = ""

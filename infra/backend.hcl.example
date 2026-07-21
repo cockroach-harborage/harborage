@@ -1,0 +1,14 @@
+# Rendered by scripts/bootstrap.sh into backend.hcl (gitignored) and inline in CI.
+# Auth: R2 bucket-scoped keys via AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY —
+# separate from the Cloudflare API token.
+bucket       = "harborage-tfstate"
+key          = "harborage.tfstate"
+region       = "auto"
+endpoint     = "https://<ACCOUNT_ID>.r2.cloudflarestorage.com"
+use_lockfile = true
+
+skip_credentials_validation = true
+skip_region_validation      = true
+skip_requesting_account_id  = true
+skip_metadata_api_check     = true
+skip_s3_checksum            = true
