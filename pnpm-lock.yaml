@@ -114,6 +114,16 @@ importers:
         specifier: ^5.2.0
         version: 5.3.0
 
+  packages/outbox:
+    dependencies:
+      idb:
+        specifier: ^8.0.3
+        version: 8.0.3
+    devDependencies:
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(lightningcss@1.33.0)
+
   packages/worker-lib:
     dependencies:
       '@cloudflare/workers-types':
@@ -1056,6 +1066,9 @@ packages:
   human-id@4.2.0:
     resolution: {integrity: sha512-K3GbkIWqyvvlpfhBPlbEvD97TtqBpAYA4kt+cn2lD2x2HuohzZCibcA2nOlnJT6exqvJLggoB5nv2dNf192nEA==}
     hasBin: true
+
+  idb@8.0.3:
+    resolution: {integrity: sha512-LtwtVyVYO5BqRvcsKuB2iUMnHwPVByPCXFXOpuU96IZPPoPN6xjOGxZQ74pgSVVLQWtUOYgyeL4GE98BY5D3wg==}
 
   is-reference@3.0.3:
     resolution: {integrity: sha512-ixkJoqQvAP88E6wLydLGGqCJsrFUnqoH6HnaczB8XmDH1oaWU+xxdptvikTgaEhtZ53Ky6YXiBuUI2WXLMCwjw==}
@@ -2232,6 +2245,8 @@ snapshots:
   hono@4.12.31: {}
 
   human-id@4.2.0: {}
+
+  idb@8.0.3: {}
 
   is-reference@3.0.3:
     dependencies:
