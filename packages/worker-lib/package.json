@@ -1,0 +1,24 @@
+{
+  "name": "@harborage/worker-lib",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./safe-log": "./src/safe-log.ts",
+    "./flags": "./src/flags.ts",
+    "./access": "./src/access.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "jose": "^6.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.0.0",
+    "vitest": "^3.2.0"
+  }
+}
