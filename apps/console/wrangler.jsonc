@@ -1,0 +1,30 @@
+// apps/console — privileged surface (manifest §18.3). Separate hostname behind
+// Cloudflare Access; the worker re-verifies the Access JWT fail-closed.
+// REPLACE_* ids are injected in CI from `tofu output`; never hardcode them.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "harborage-console",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-07-15",
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1
+	},
+	"routes": [{ "pattern": "console.cockroachharborage.org", "custom_domain": true }],
+	"durable_objects": {
+		"bindings": [{ "name": "FLAG_STATE", "class_name": "FlagState" }]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlagState"] }],
+	"kv_namespaces": [{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" }],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "harborage",
+			"database_id": "REPLACE_D1_ID",
+			"migrations_dir": "../../migrations"
+		}
+	],
+	"vars": {
+		"ACCESS_TEAM_DOMAIN": "REPLACE_ACCESS_TEAM_DOMAIN"
+	}
+}
