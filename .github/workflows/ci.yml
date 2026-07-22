@@ -67,7 +67,7 @@ jobs:
 
       - name: Offline cold-boot smoke (Playwright)
         run: |
-          pnpm --filter @harborage/web exec playwright install chromium --with-deps
+          pnpm --filter @harborage/web exec playwright install chromium
           pnpm --filter @harborage/web run test:e2e
 
   tofu:
