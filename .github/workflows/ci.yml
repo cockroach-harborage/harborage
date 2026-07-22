@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      WRANGLER_SEND_METRICS: 'false'
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -32,6 +34,7 @@ jobs:
             nodejs.org:443
             cdn.playwright.dev:443
             playwright.download.prss.microsoft.com:443
+            cdn.jsdelivr.net:443
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
