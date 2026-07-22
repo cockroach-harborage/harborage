@@ -83,7 +83,11 @@ fi
 if ! gh secret list --env production | grep -q "HB_HMAC_PEPPER"; then
   set_secret HB_HMAC_PEPPER "$(openssl rand -hex 32)"
 fi
-gh variable set ADMIN_HANDLES --body "$ADMIN_EMAILS" >/dev/null && echo "    variable ADMIN_HANDLES set"
+gh variable set ADMIN_HANDLES --body "$ADMIN_EMAILS" >/dev/null
+gh variable set CF_ACCOUNT_ID --body "$ACCOUNT_ID" >/dev/null
+gh variable set ZONE_NAME --body "$ZONE_NAME" >/dev/null
+gh variable set GITHUB_IDP_CLIENT_ID --body "${GITHUB_IDP_CLIENT_ID:-}" >/dev/null
+echo "    variables ADMIN_HANDLES, CF_ACCOUNT_ID, ZONE_NAME, GITHUB_IDP_CLIENT_ID set"
 
 echo "==> Rendering backend.hcl + terraform.tfvars (gitignored)"
 cat > infra/backend.hcl <<EOF

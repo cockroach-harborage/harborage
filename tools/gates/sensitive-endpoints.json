@@ -1,0 +1,4 @@
+{
+  "comment": "Every sensitive intake endpoint (E2E-sealed body required) must be listed here. gate-sealed-body.mjs requires a rejection test per entry. First entries land at M1 with workers/api.",
+  "endpoints": []
+}

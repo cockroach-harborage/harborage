@@ -1,0 +1,15 @@
+# Grouped updates; never auto-merged (CLAUDE.md). Every PR goes through the
+# same review gates as human changes.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

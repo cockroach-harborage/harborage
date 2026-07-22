@@ -1,0 +1,13 @@
+# Sensitive paths (CLAUDE.md; ARCHITECTURE §10.6). Enforcement of >=2 reviewers
+# activates when a second maintainer exists; until then this file is the map of
+# what counts as sensitive.
+*                     @cockroach-harborage
+/workers/             @cockroach-harborage
+/packages/crypto/     @cockroach-harborage
+/packages/worker-lib/ @cockroach-harborage
+/packages/outbox/     @cockroach-harborage
+/migrations/          @cockroach-harborage
+/.github/             @cockroach-harborage
+/infra/               @cockroach-harborage
+/tools/gates/         @cockroach-harborage
+wrangler.jsonc        @cockroach-harborage
