@@ -35,7 +35,15 @@ gh api -X PUT "repos/${REPO}/branches/main/protection" --input - >/dev/null <<'E
   "required_conversation_resolution": true
 }
 EOF
-gh api -X POST "repos/${REPO}/branches/main/protection/required_signatures" >/dev/null || true
+# Required signatures reject any push GitHub cannot verify. Enable only after
+# the signing public key is registered on the pushing account
+# (gh auth refresh -s admin:ssh_signing_key && gh ssh-key add --type signing).
+if [[ "${ENFORCE_SIGNATURES:-}" == "1" ]]; then
+  gh api -X POST "repos/${REPO}/branches/main/protection/required_signatures" >/dev/null || true
+  echo "==> required_signatures enabled"
+else
+  echo "==> required_signatures SKIPPED (set ENFORCE_SIGNATURES=1 after registering the signing key)"
+fi
 
 echo "Done. Note: required_pull_request_reviews stays null while the project has a"
 echo "single maintainer; raise to >=2 reviewers + CODEOWNERS enforcement as soon as"
