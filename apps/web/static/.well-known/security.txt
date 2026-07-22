@@ -1,0 +1,5 @@
+Contact: https://github.com/cockroach-harborage/harborage/security/advisories/new
+Expires: 2027-07-22T00:00:00.000Z
+Preferred-Languages: en, hi
+Canonical: https://cockroachharborage.org/.well-known/security.txt
+Policy: https://github.com/cockroach-harborage/harborage/blob/main/SECURITY.md

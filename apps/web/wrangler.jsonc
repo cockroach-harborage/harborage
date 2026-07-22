@@ -1,0 +1,23 @@
+// apps/web — SvelteKit PWA on Workers Static Assets (manifest §18.3).
+// REPLACE_* ids are injected in CI from `tofu output`; never hardcode them.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "harborage-web",
+	"main": ".svelte-kit/cloudflare/_worker.js",
+	"compatibility_date": "2026-07-15",
+	"compatibility_flags": ["nodejs_compat"],
+	"assets": {
+		"binding": "ASSETS",
+		"directory": ".svelte-kit/cloudflare"
+	},
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1
+	},
+	"routes": [{ "pattern": "cockroachharborage.org", "custom_domain": true }],
+	"kv_namespaces": [
+		{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" },
+		{ "binding": "CONFIG", "id": "REPLACE_KV_CONFIG_ID" },
+		{ "binding": "I18N", "id": "REPLACE_KV_I18N_ID" }
+	]
+}

@@ -7,6 +7,14 @@
  * Milestone keys: fields marked M1+ exist here as the authored contract and
  * enter a wrangler.jsonc only when that worker ships.
  */
+import type {
+	D1Database,
+	DurableObjectNamespace,
+	Fetcher,
+	KVNamespace,
+	Queue,
+	R2Bucket
+} from '@cloudflare/workers-types';
 
 /** Fail-closed feature flags. Read via flags.ts only — never gate on raw KV. */
 export interface FlagBindings {

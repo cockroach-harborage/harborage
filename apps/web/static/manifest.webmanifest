@@ -1,0 +1,17 @@
+{
+	"name": "Harborage",
+	"short_name": "Harborage",
+	"description": "Get help, or give help. No account needed.",
+	"start_url": "/",
+	"display": "standalone",
+	"background_color": "#F7F7F5",
+	"theme_color": "#F7F7F5",
+	"icons": [
+		{
+			"src": "/favicon.svg",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "any"
+		}
+	]
+}

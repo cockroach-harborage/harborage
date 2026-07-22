@@ -14,8 +14,9 @@ if (existsSync(webDir)) {
 		problems.push('apps/web/svelte.config.js missing');
 	} else {
 		const cfg = readFileSync(svelteConfig, 'utf8');
-		if (!/csp\s*:/.test(cfg) || !/mode\s*:\s*['"]nonce['"]/.test(cfg))
-			problems.push('svelte.config.js: kit.csp with mode "nonce" is required');
+		// "auto" = nonces on dynamic responses, hashes on prerendered pages.
+		if (!/csp\s*:/.test(cfg) || !/mode\s*:\s*['"](nonce|auto)['"]/.test(cfg))
+			problems.push('svelte.config.js: kit.csp with mode "nonce" or "auto" is required');
 		if (/unsafe-inline|unsafe-eval/.test(cfg))
 			problems.push('svelte.config.js: unsafe-inline/unsafe-eval must not appear');
 	}
