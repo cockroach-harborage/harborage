@@ -25,7 +25,7 @@ gh api -X PUT "repos/${REPO}/vulnerability-alerts" >/dev/null || true
 echo "==> Branch protection on main"
 gh api -X PUT "repos/${REPO}/branches/main/protection" --input - >/dev/null <<'EOF'
 {
-  "required_status_checks": { "strict": true, "contexts": ["ci"] },
+  "required_status_checks": { "strict": true, "contexts": ["ci", "e2e"] },
   "enforce_admins": true,
   "required_pull_request_reviews": null,
   "restrictions": null,
