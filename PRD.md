@@ -726,7 +726,7 @@ A **five-tab bottom bar** is the spine. It is fixed, always visible, always icon
 
 | Tab | Label EN | Label HI | Holds |
 |---|---|---|---|
-| 🏠 | Home | होम | The two hero actions plus a few big cards |
+| 🏠 | Home | होम | The three primary actions plus a few big cards |
 | 🛡️ | Stay safe | सुरक्षा | Crisis cards, rights, notices. Fully offline |
 | 📷 | Record | रिकॉर्ड | Capture, hide faces, save or send evidence |
 | 🧭 | Nearby | आस-पास | Ground conditions and area updates |
@@ -736,7 +736,7 @@ Five is the ceiling. Tapping a tab always opens that section's top screen. The a
 
 **Settings** (language, text size, identity backup, safe mode, offline, "how checking works") lives behind a small gear at the top-right of Home. It is not a tab and it holds nothing a user needs mid-crisis. Everything a person needs fast is in the five tabs, never settings-only.
 
-**The two hero actions do not get their own tabs.** "Get help" and "Give help" are the whole top of Home. As tabs they would shrink to icons. On Home they can be large, labelled, and colour-coded. Home is one tap away from anywhere, so the heroes are always two taps out at most.
+**Get help and Give help do not get their own tabs.** They, with Document an incident, are the whole top of Home. As tabs Get help / Give help would shrink to icons; on Home they can be large, labelled, and colour-coded. (Document an incident leads into the existing Record tab.) Home is one tap away from anywhere, so the top actions are always two taps out at most.
 
 **Back behaviour.** On-screen back (top-left) and hardware back do the same thing. Within a section, back steps up the tree. At a section top, back returns to Home. Quick-exit overrides everything and drops to the neutral Directory view.
 
@@ -811,11 +811,12 @@ Top to bottom, one column, no horizontal scroll:
 
 1. **A quiet header.** App name small on the left. On the right: language toggle (अ/A), a gear (settings), and a plain **Close** control (quick-exit).
 2. **Get help.** Filled with the accent colour, on top, largest text in the app. Big open-hand icon. Subtitle: "Medical, legal, food, safety." This is the button a distress user's eye lands on without reading.
-3. **Give help.** Outlined, below, clearly secondary. Same width, calm. Subtitle: "Offer what you can."
-4. **Four big cards, stacked:** Stay safe · Nearby · Directory · Record.
-5. **One thin line:** current city, and "Offline. Showing saved information." only when offline. Tapping the city opens the picker.
+3. **Document an incident.** Outlined, below Get help, calm. Camera icon. Subtitle: "Photos, notes, audio. Stays on your phone." Neutral document-it-yourself wording, never "report" (which reads as filing with police, more so in Hindi). Leads into the Record tab.
+4. **Give help.** Outlined, below, clearly secondary. Same width, calm. Subtitle: "Offer what you can."
+5. **Three big cards, stacked:** Stay safe · Nearby · Directory.
+6. **One thin line:** current city, and "Offline. Showing saved information." only when offline. Tapping the city opens the picker.
 
-The two heroes are **not equal weight.** Get help wins the eye. A person who cannot read should still reach for the right one.
+The three primary actions are **not equal weight.** Get help wins the eye; Document an incident and Give help are calm and outlined below it. A person who cannot read should still reach for the right one.
 
 That is the whole screen. No feed dump, no stats, no onboarding wall, no signup. First launch drops straight here.
 
@@ -951,8 +952,8 @@ The chip shows the **short word first,** at chip size. The full sentence sits be
 - Single column, max content width 560 px. Bottom bar of five tabs. Sticky full-width primary button above the nav on any screen with a main action.
 - **No horizontal scroll on any primary path.** Crisis cards are a vertical stack. Category lists are short with a "More" row.
 - Two building blocks only: a **card** (icon, title, one detail line, checking chip, one action) and a **list row** (56 px min, icon, title, chevron, checking chip). Learn two, build every screen.
-- Calm neutral base, one scarce accent (muted teal), semantic colours only on small elements and always with an icon and word. Hazard is burnt orange, never siren red. Red-soaked screens read as panic and as "app for troublemakers."
-- Two font weights only, Noto Sans plus Noto Sans Devanagari, self-hosted, subset to woff2, under about 120 KB total. System-font fallback while loading.
+- Warm paper base (cream `#F4EBD7`, ink `#1A1108`), one scarce accent (deep saffron `#A8410F`; the vivid `#E0651E` is decoration only), semantic colours only on small elements and always with an icon and word. Hazard is burnt oxblood, never siren red. Red-soaked screens read as panic and as "app for troublemakers." The look is a calm hand-printed broadsheet, not a party poster — no wordmark, no slogans, no flags or fists.
+- Body is Noto Sans + Noto Sans Devanagari (two weights, dual-script), self-hosted and subset to woff2. Headings/masthead use Oswald (Latin, one weight) for a poster voice; Hindi headings fall back to Noto Devanagari. Budget stays light on 2G: English first paint ~45 KB, Hindi ~130 KB (Devanagari is the inherent cost). `font-display:swap`, system-font fallback while loading.
 - Skeletons, not spinners, for content. Instant cached app shell. Honest connection state as a thin quiet strip, never a scary modal. Queued actions say so: "Saved. Will send when you're back online."
 - Minimal motion. No pulsing, no auto-play, nothing on hazard elements. Transitions 120 to 200 ms, dropped to instant under reduced motion.
 
@@ -970,25 +971,28 @@ The chip shows the **short word first,** at chip size. The full sentence sits be
   --r-sm:8px; --r-md:12px; --r-lg:16px; --r-pill:999px;
 
   --font:"Noto Sans","Noto Sans Devanagari",system-ui,sans-serif;
+  --font-display:"Oswald","Noto Sans Devanagari",system-ui,sans-serif; /* headings/labels; Hindi falls back to Noto Devanagari */
+  --font-mono:ui-monospace,"Cascadia Mono","Roboto Mono",monospace;
   --text-xs:0.8125rem; --text-sm:0.9375rem; --text-base:1.0625rem; /* 17px */
   --text-lg:1.25rem; --text-xl:1.5rem; --text-2xl:1.875rem;
   --lh-tight:1.3; --lh-body:1.6; --fw-reg:400; --fw-semi:600;
 
   --motion-fast:120ms; --motion-base:200ms; --ease:ease-out;
 
-  /* light */
-  --bg:#F7F7F5; --surface:#FFFFFF; --border:#E2E2DD;
-  --text:#1C1C1A; --text-muted:#5C5C57;
-  --accent:#0F6E6E; --accent-text:#FFFFFF;
-  --hazard:#B23A1E; --safe:#2E6B3E; --caution:#8A6A0F; --info:#5C5C57;
-  --focus:#0F6E6E;
+  /* light — warm paper + ink + saffron */
+  --bg:#F4EBD7; --surface:#FBF6EA; --surface-2:#EADFC4; --border:#DBCBA5; --rule:#3A2A1C;
+  --text:#1A1108; --text-muted:#6A5440;
+  --accent:#A8410F; --accent-text:#FDF7EA; --accent-bright:#E0651E; --accent-press:#7F2F0A;
+  --hazard:#9E2B12; --safe:#1F5A2E; --caution:#8A6A0F; --info:#6A5440;
+  --focus:#A8410F;
 }
 :root[data-theme="dark"] {
-  --bg:#141414; --surface:#1F1F1E; --border:#34342F;
-  --text:#EDEDE8; --text-muted:#A0A099;
-  --accent:#3BA3A3; --accent-text:#0A2E2E;
-  --hazard:#E8785A; --safe:#5FB878; --caution:#D6A93B; --info:#A0A099;
-  --focus:#3BA3A3;
+  /* dark — warm ink-paper inversion */
+  --bg:#1A140C; --surface:#241C11; --surface-2:#2E2416; --border:#3A2E1E; --rule:#5A4630;
+  --text:#F4EBD7; --text-muted:#C9B79A;
+  --accent:#F0823A; --accent-text:#241C11; --accent-bright:#F0823A; --accent-press:#D86A24;
+  --hazard:#E8785A; --safe:#5FB878; --caution:#D6A93B; --info:#C9B79A;
+  --focus:#F0823A;
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration:0ms !important; animation:none !important; }
