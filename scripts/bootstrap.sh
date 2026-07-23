@@ -14,6 +14,7 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 : "${ZONE_NAME:=cockroachharborage.org}"
+: "${ACCESS_TEAM_DOMAIN:=cockroach-harborage.cloudflareaccess.com}"
 need() { [[ -n "${!1:-}" ]] || { echo "Missing required env: $1 (set it in .env.bootstrap)"; exit 1; }; }
 need HB_TERRAFORM_TOKEN
 need HB_DEPLOY_TOKEN
@@ -55,10 +56,18 @@ else
 fi
 
 echo "==> Vectorize index (dimension immutable at creation — 768, cosine)"
-if ! pnpm exec wrangler vectorize list 2>/dev/null | grep -q "harborage-embeddings"; then
-  pnpm exec wrangler vectorize create harborage-embeddings --dimensions=768 --metric=cosine
-else
+# Vectorize is M1-only (AI trust engine). Do not hard-fail the M0 infra bootstrap
+# if the Terraform token lacks the Vectorize permission — warn and continue.
+VECTORIZE_PENDING=0
+if pnpm exec wrangler vectorize list 2>/dev/null | grep -q "harborage-embeddings"; then
   echo "    harborage-embeddings exists"
+elif pnpm exec wrangler vectorize create harborage-embeddings --dimensions=768 --metric=cosine; then
+  echo "    harborage-embeddings created"
+else
+  echo "    WARNING: could not create the Vectorize index — HB_TERRAFORM_TOKEN likely"
+  echo "             lacks 'Vectorize: Edit' (Account). It is M1-only, so continuing."
+  echo "             Add the permission to the token and re-run to create the index."
+  VECTORIZE_PENDING=1
 fi
 
 echo "==> DNS snapshot (restore source if a later change breaks records)"
@@ -86,8 +95,14 @@ fi
 gh variable set ADMIN_HANDLES --body "$ADMIN_EMAILS" >/dev/null
 gh variable set CF_ACCOUNT_ID --body "$ACCOUNT_ID" >/dev/null
 gh variable set ZONE_NAME --body "$ZONE_NAME" >/dev/null
-gh variable set GITHUB_IDP_CLIENT_ID --body "${GITHUB_IDP_CLIENT_ID:-}" >/dev/null
-echo "    variables ADMIN_HANDLES, CF_ACCOUNT_ID, ZONE_NAME, GITHUB_IDP_CLIENT_ID set"
+# GitHub reserves the GITHUB_ prefix for variable names, so the local
+# GITHUB_IDP_CLIENT_ID maps to the GH variable IDP_GITHUB_CLIENT_ID.
+gh variable set IDP_GITHUB_CLIENT_ID --body "${GITHUB_IDP_CLIENT_ID:-}" >/dev/null
+# Console Access JWT issuer host (apps/console verifyAccess). Human-chosen at
+# Zero Trust onboarding, not Terraform-generated, so it rides with the other
+# human-provided vars (ZONE_NAME/CF_ACCOUNT_ID) rather than a tofu output.
+gh variable set ACCESS_TEAM_DOMAIN --body "$ACCESS_TEAM_DOMAIN" >/dev/null
+echo "    variables ADMIN_HANDLES, CF_ACCOUNT_ID, ZONE_NAME, IDP_GITHUB_CLIENT_ID, ACCESS_TEAM_DOMAIN set"
 
 echo "==> Rendering backend.hcl + terraform.tfvars (gitignored)"
 cat > infra/backend.hcl <<EOF
@@ -120,6 +135,9 @@ tofu init -backend-config=backend.hcl -input=false
 tofu validate
 tofu plan -input=false
 echo
+if [[ "${VECTORIZE_PENDING:-0}" == "1" ]]; then
+  echo "NOTE: Vectorize index NOT created — add 'Vectorize: Edit' to HB_TERRAFORM_TOKEN and re-run."
+fi
 echo "Bootstrap complete. Read the plan above (RUNBOOK Part A step 7)."
 echo "Any change or destroy on DNS/Access/signing config is a bug: stop and investigate."
 echo "When the plan is clean, push to main — CI applies and deploys."

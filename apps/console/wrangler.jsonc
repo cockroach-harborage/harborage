@@ -10,6 +10,9 @@
 		"enabled": true,
 		"head_sampling_rate": 1
 	},
+	// Privileged surface: never served at *.workers.dev (that hostname is not
+	// behind the Access app, so it would be a fail-open bypass). Custom domain only.
+	"workers_dev": false,
 	"routes": [{ "pattern": "console.cockroachharborage.org", "custom_domain": true }],
 	"durable_objects": {
 		"bindings": [{ "name": "FLAG_STATE", "class_name": "FlagState" }]
