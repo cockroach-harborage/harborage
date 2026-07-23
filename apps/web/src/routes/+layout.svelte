@@ -13,12 +13,34 @@
 	const path = $derived(page.url.pathname.replace(/^\/hi(?=\/|$)/, '') || '/');
 	const isHome = $derived(path === '/');
 
+	let theme = $state<'light' | 'dark'>('light');
+
+	function toggleTheme() {
+		theme = theme === 'dark' ? 'light' : 'dark';
+		document.documentElement.dataset.theme = theme;
+		try {
+			localStorage.setItem('theme', theme);
+		} catch {
+			/* storage may be unavailable; the live switch still applies */
+		}
+	}
+
 	const tabs = $derived([
 		{ href: '/', icon: 'home', label: m.nav_home(), active: path === '/' },
-		{ href: '/stay-safe', icon: 'shield', label: m.nav_stay_safe(), active: path.startsWith('/stay-safe') },
+		{
+			href: '/stay-safe',
+			icon: 'shield',
+			label: m.nav_stay_safe(),
+			active: path.startsWith('/stay-safe')
+		},
 		{ href: '/record', icon: 'camera', label: m.nav_record(), active: path.startsWith('/record') },
 		{ href: '/nearby', icon: 'compass', label: m.nav_nearby(), active: path.startsWith('/nearby') },
-		{ href: '/directory', icon: 'book', label: m.nav_directory(), active: path.startsWith('/directory') }
+		{
+			href: '/directory',
+			icon: 'book',
+			label: m.nav_directory(),
+			active: path.startsWith('/directory')
+		}
 	]);
 
 	function quickExit() {
@@ -32,10 +54,11 @@
 	}
 
 	onMount(() => {
-		const storedTheme = localStorage.getItem('theme');
 		const media = matchMedia('(prefers-color-scheme: dark)');
 		const applyTheme = () => {
-			const theme = storedTheme ?? (media.matches ? 'dark' : 'light');
+			// A saved choice wins; otherwise follow the device.
+			const stored = localStorage.getItem('theme');
+			theme = (stored ?? (media.matches ? 'dark' : 'light')) as 'light' | 'dark';
 			document.documentElement.dataset.theme = theme;
 		};
 		applyTheme();
@@ -64,6 +87,10 @@
 		>
 			{otherLocale === 'hi' ? 'अ' : 'A'}
 		</a>
+		<button class="topbar-btn" onclick={toggleTheme} aria-label={m.theme_toggle()}>
+			<Icon name="theme" />
+			<span class="visually-hidden">{m.theme_toggle()}</span>
+		</button>
 		{#if isHome}
 			<a class="topbar-btn" href={localizeHref('/settings')} aria-label={m.settings()}>
 				<Icon name="gear" />
@@ -84,18 +111,15 @@
 	<footer class="notice-line">
 		<a href={localizeHref('/limits')}>{m.footer_limits()}</a>
 		·
-		<a href="https://github.com/cockroach-harborage/harborage" rel="noopener">{m.footer_source()}</a>
+		<a href="https://github.com/cockroach-harborage/harborage" rel="noopener">{m.footer_source()}</a
+		>
 	</footer>
 </div>
 
 <nav class="tabbar" aria-label="Main">
 	<div class="tabbar-inner">
 		{#each tabs as tab (tab.href)}
-			<a
-				class="tab"
-				href={localizeHref(tab.href)}
-				aria-current={tab.active ? 'page' : undefined}
-			>
+			<a class="tab" href={localizeHref(tab.href)} aria-current={tab.active ? 'page' : undefined}>
 				<Icon name={tab.icon} size={22} />
 				<span>{tab.label}</span>
 			</a>
