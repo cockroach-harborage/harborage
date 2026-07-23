@@ -31,6 +31,21 @@ Everything else the user asked for is delivered. If you want to revisit any red 
 
 ---
 
+## Session 2.7 updates — platform identity & integrated roadmap (read this first)
+
+Harborage is a **comprehensive protest platform, not a get-help app.** Six first-class pillars, all core (not optional add-ons), each already architected in the sections below and sequenced into the M1–M5 build (§8, ARCHITECTURE §12/§18). Every data-holding piece stays behind its readiness gate + kill switch; nothing here loosens a red line or a counsel gate.
+
+1. **Get help / Give help** — the two brokered front-door routers (§4.7–4.9, §15).
+2. **Document an incident** — now a Home **primary action** (third front-door action, §15), built on the Incident as the central primitive (§2): capture, **upload a file, or import from a source link** (§4.4); documented-first on 2G; redact-before-send; keep-on-phone by default. AI screening is the first line against fakes (`AI-Screened`; ARCHITECTURE §15).
+3. **Public incident record — browse & search (was a gap; now core).** A public, searchable archive of verified incidents (state/UT filter, category tags, honest verification labels, map-later) — the theprotestrecord.com feature set, built the private way: client-side search over a Cron-materialized **public-plaintext** index, **no query logging**; only Verified/Community-Corroborated surfaced, Unverified never public. Read model **M1**, full pipeline + map **M3**, behind an `incidents_publish` flag. This is the public face of §4.4 + the Evidence Archive (§16) and was missing from earlier drafts.
+4. **Community as the second line of defense, from day 1** — public volunteers verify / corroborate / comment / report (Layer A, §15). These are **reversible inputs to the verification state machine only**, reputation-gated, flags-never-auto-remove, shown through the honest four labels. Report-a-problem lands at **M1**; corroborate + the state machine at **M2**. Approved moderators are the **third line** (Layer B, §4.11), on the privileged surface off the public app.
+5. **Accountability & legal tracking** — the institutional accountability dashboard + complaint / FIR / NHRC / court status + hearing-and-deadline calendar (§4.10) — the layer pure documentation archives lack. The **institutional/aggregate** read surface is core (M5, counsel-gated); individual naming stays m-of-n reviewer-gated and ships OFF.
+6. **Live conditions + detention support** — the zone-level live board (§4.5) and easily-reachable detention know-your-rights (Art 22 / DK Basu), with the detainee tracker off-platform, onion-only, human-confirmed (§4.10B; ARCHITECTURE §8.3).
+
+**Integration, not a side track.** These fold into the existing milestone plan (§8, ARCHITECTURE §12/§18); any "phase two / later add-on" framing is wrong. The only genuinely new roadmap item is #3 (public incident browse), added as core M1/M3. The 2026-07-24 retheme (warm broadsheet palette + the "Document an incident" front door) is the first slice shipped.
+
+---
+
 ## Session 2.5 updates — read this first (supersede earlier text where they conflict)
 
 Later design passes refined this PRD. Where older wording below conflicts, these win:
