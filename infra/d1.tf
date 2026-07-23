@@ -6,5 +6,8 @@ resource "cloudflare_d1_database" "harborage" {
 
   lifecycle {
     prevent_destroy = true
+    # Provider ~> 5.22 nulls read_replication on re-apply (API rejects it). D1
+    # stays single-region ("disabled") by default; we do not manage this attr.
+    ignore_changes = [read_replication]
   }
 }

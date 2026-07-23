@@ -9,4 +9,14 @@ resource "cloudflare_ai_gateway" "gw" {
   rate_limiting_interval     = 60
   rate_limiting_limit        = 1000
   rate_limiting_technique    = "sliding"
+
+  # Provider ~> 5.22 cannot cleanly diff this resource: it stores server-defaulted
+  # optional attrs as null and re-applies them (the API rejects null booleans and
+  # null objects), and computed attrs (otel/spend_limits/timestamps) force a
+  # perpetual update-in-place. The gateway is create-once (config is stable and
+  # M0-flag-OFF), so manage creation and ignore all post-create drift. A deliberate
+  # config change would be applied via -replace.
+  lifecycle {
+    ignore_changes = all
+  }
 }
