@@ -14,6 +14,9 @@
 		"enabled": true,
 		"head_sampling_rate": 1
 	},
+	// Custom-domain only; the account workers.dev subdomain (cockroach-harborage)
+	// is claimed but this Worker is never served at *.workers.dev.
+	"workers_dev": false,
 	"routes": [{ "pattern": "cockroachharborage.org", "custom_domain": true }],
 	"kv_namespaces": [
 		{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" },

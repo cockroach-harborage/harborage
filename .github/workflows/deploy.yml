@@ -47,7 +47,7 @@ jobs:
           CF_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
           ZONE_NAME: ${{ vars.ZONE_NAME }}
           ADMIN_HANDLES: ${{ vars.ADMIN_HANDLES }}
-          GITHUB_IDP_CLIENT_ID: ${{ vars.GITHUB_IDP_CLIENT_ID }}
+          IDP_GITHUB_CLIENT_ID: ${{ vars.IDP_GITHUB_CLIENT_ID }}
         run: |
           cat > backend.hcl <<EOF
           bucket       = "harborage-tfstate"
@@ -66,7 +66,7 @@ jobs:
           account_id   = "${CF_ACCOUNT_ID}"
           zone_name    = "${ZONE_NAME}"
           admin_emails = [${admin_emails%,}]
-          github_idp_client_id = "${GITHUB_IDP_CLIENT_ID}"
+          github_idp_client_id = "${IDP_GITHUB_CLIENT_ID}"
           EOF
 
       - name: Plan and apply
@@ -162,8 +162,14 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.HB_DEPLOY_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+          ACCESS_TEAM_DOMAIN: ${{ vars.ACCESS_TEAM_DOMAIN }}
         run: |
-          sed -i "s/REPLACE_KV_FLAGS_ID/${KV_FLAGS_ID}/; s/REPLACE_D1_ID/${D1_ID}/" wrangler.jsonc
+          # Fail loudly rather than ship a bricked (fail-closed-denied) console:
+          # verifyAccess builds the JWT issuer from ACCESS_TEAM_DOMAIN.
+          if [ -z "${ACCESS_TEAM_DOMAIN}" ]; then
+            echo "ACCESS_TEAM_DOMAIN variable is not set (Zero Trust team domain, e.g. harborage.cloudflareaccess.com)"; exit 1
+          fi
+          sed -i "s/REPLACE_KV_FLAGS_ID/${KV_FLAGS_ID}/; s/REPLACE_D1_ID/${D1_ID}/; s/REPLACE_ACCESS_TEAM_DOMAIN/${ACCESS_TEAM_DOMAIN}/" wrangler.jsonc
           pnpm exec wrangler deploy
           pnpm exec wrangler d1 migrations apply harborage --remote
 
