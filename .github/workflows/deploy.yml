@@ -197,7 +197,18 @@ jobs:
         env:
           ZONE_NAME: ${{ vars.ZONE_NAME }}
         run: |
-          code=$(curl -s -o /dev/null -w '%{http_code}' "https://${ZONE_NAME}/")
-          [ "$code" = "200" ] || { echo "public app returned $code"; exit 1; }
-          code=$(curl -s -o /dev/null -w '%{http_code}' "https://console.${ZONE_NAME}/")
+          # A freshly-created Worker Custom Domain takes a minute or two to
+          # propagate DNS + issue its edge cert, so retry the public check —
+          # a first-deploy propagation race must not be a false failure.
+          code=000
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://${ZONE_NAME}/" || echo 000)
+            [ "$code" = "200" ] && break
+            echo "attempt $i: public returned $code; retrying in 15s"
+            sleep 15
+          done
+          [ "$code" = "200" ] || { echo "public app returned $code after retries"; exit 1; }
+          # Console check fails closed: only a 200 (reachable without Access)
+          # fails; 302 (Access redirect) and 000 (not up) both pass.
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://console.${ZONE_NAME}/")
           [ "$code" != "200" ] || { echo "console is reachable without Access — failing closed"; exit 1; }
