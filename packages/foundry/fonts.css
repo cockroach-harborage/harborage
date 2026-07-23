@@ -1,6 +1,11 @@
-/* Self-hosted fonts, two weights only (PRD §15). Served from the app bundle;
-   unicode-range in the Fontsource CSS keeps actual downloads to the scripts in use. */
-@import '@fontsource/noto-sans/400.css';
-@import '@fontsource/noto-sans/600.css';
-@import '@fontsource/noto-sans-devanagari/400.css';
-@import '@fontsource/noto-sans-devanagari/600.css';
+/* Self-hosted fonts (PRD §15). Served from the app bundle; explicit script
+   subsets keep downloads to the scripts in use, and font-display:swap (built into
+   Fontsource) keeps text visible on slow links.
+   - Noto Sans (Latin) + Noto Sans Devanagari: dual-script body.
+   - Oswald (Latin): condensed poster voice for headings/labels only. Hindi
+     headings fall back to Noto Sans Devanagari (see --font-display in tokens.css). */
+@import '@fontsource/noto-sans/latin-400.css';
+@import '@fontsource/noto-sans/latin-600.css';
+@import '@fontsource/noto-sans-devanagari/devanagari-400.css';
+@import '@fontsource/noto-sans-devanagari/devanagari-600.css';
+@import '@fontsource/oswald/latin-600.css';

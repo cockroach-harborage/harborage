@@ -1,6 +1,7 @@
 /* Harborage design tokens. Source of truth: PRD.md §15 "Starter design tokens".
-   This is the one token set. Changing a colour requires re-running the AA contrast
-   gate (tools/gates/gate-contrast.mjs) and updating PRD §15 in the same commit. */
+   This is the one token set — a warm paper/ink/saffron broadsheet palette (light + dark).
+   Changing a colour requires re-running the AA contrast gate
+   (tools/gates/gate-contrast.mjs) and updating PRD §15 in the same commit. */
 :root {
 	--sp-1: 4px;
 	--sp-2: 8px;
@@ -15,6 +16,9 @@
 	--r-pill: 999px;
 
 	--font: 'Noto Sans', 'Noto Sans Devanagari', system-ui, sans-serif;
+	--font-display:
+		'Oswald', 'Noto Sans Devanagari', system-ui, sans-serif; /* headings/labels; Hindi falls back to Noto Devanagari */
+	--font-mono: ui-monospace, 'Cascadia Mono', 'Roboto Mono', monospace;
 	--text-xs: 0.8125rem;
 	--text-sm: 0.9375rem;
 	--text-base: 1.0625rem; /* 17px */
@@ -30,33 +34,42 @@
 	--motion-base: 200ms;
 	--ease: ease-out;
 
-	/* light */
-	--bg: #f7f7f5;
-	--surface: #ffffff;
-	--border: #e2e2dd;
-	--text: #1c1c1a;
-	--text-muted: #5c5c57;
-	--accent: #0f6e6e;
-	--accent-text: #ffffff;
-	--hazard: #b23a1e;
-	--safe: #2e6b3e;
+	/* light — warm paper + ink + saffron */
+	--bg: #f4ebd7;
+	--surface: #fbf6ea;
+	--surface-2: #eadfc4;
+	--border: #dbcba5;
+	--rule: #3a2a1c;
+	--text: #1a1108;
+	--text-muted: #6a5440;
+	--accent: #a8410f;
+	--accent-text: #fdf7ea;
+	--accent-bright: #e0651e;
+	--accent-press: #7f2f0a;
+	--hazard: #9e2b12;
+	--safe: #1f5a2e;
 	--caution: #8a6a0f;
-	--info: #5c5c57;
-	--focus: #0f6e6e;
+	--info: #6a5440;
+	--focus: #a8410f;
 }
 :root[data-theme='dark'] {
-	--bg: #141414;
-	--surface: #1f1f1e;
-	--border: #34342f;
-	--text: #edede8;
-	--text-muted: #a0a099;
-	--accent: #3ba3a3;
-	--accent-text: #0a2e2e;
+	/* dark — warm ink-paper inversion */
+	--bg: #1a140c;
+	--surface: #241c11;
+	--surface-2: #2e2416;
+	--border: #3a2e1e;
+	--rule: #5a4630;
+	--text: #f4ebd7;
+	--text-muted: #c9b79a;
+	--accent: #f0823a;
+	--accent-text: #241c11;
+	--accent-bright: #f0823a;
+	--accent-press: #d86a24;
 	--hazard: #e8785a;
 	--safe: #5fb878;
 	--caution: #d6a93b;
-	--info: #a0a099;
-	--focus: #3ba3a3;
+	--info: #c9b79a;
+	--focus: #f0823a;
 }
 @media (prefers-reduced-motion: reduce) {
 	* {

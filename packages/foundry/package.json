@@ -1,14 +1,15 @@
 {
-  "name": "@harborage/foundry",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    "./tokens.css": "./tokens.css",
-    "./fonts.css": "./fonts.css"
-  },
-  "dependencies": {
-    "@fontsource/noto-sans": "^5.2.0",
-    "@fontsource/noto-sans-devanagari": "^5.2.0"
-  }
+	"name": "@harborage/foundry",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		"./tokens.css": "./tokens.css",
+		"./fonts.css": "./fonts.css"
+	},
+	"dependencies": {
+		"@fontsource/noto-sans": "^5.2.0",
+		"@fontsource/noto-sans-devanagari": "^5.2.0",
+		"@fontsource/oswald": "^5.2.0"
+	}
 }
