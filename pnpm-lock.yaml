@@ -116,6 +116,9 @@ importers:
       '@fontsource/noto-sans-devanagari':
         specifier: ^5.2.0
         version: 5.3.0
+      '@fontsource/oswald':
+        specifier: ^5.2.0
+        version: 5.3.0
 
   packages/outbox:
     dependencies:
@@ -368,6 +371,9 @@ packages:
 
   '@fontsource/noto-sans@5.3.0':
     resolution: {integrity: sha512-fBCog2PY7DiVVTEEqtI/Qdinx/knobHYfoGpjFXdfBX5RoJaBp1Prw2G75p0OIsdlMZg3cLo0c+YbIUYOxnQJw==}
+
+  '@fontsource/oswald@5.3.0':
+    resolution: {integrity: sha512-16r2aHActe0pH+9FLdk/74/YxXM7HpGak05kAzx3RvSToiJwGvyhv6GvckPz+YuZmvL1nxWbEop2jAXRcXYPRg==}
 
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
@@ -1485,6 +1491,8 @@ snapshots:
   '@fontsource/noto-sans-devanagari@5.3.0': {}
 
   '@fontsource/noto-sans@5.3.0': {}
+
+  '@fontsource/oswald@5.3.0': {}
 
   '@img/colour@1.1.0': {}
 
