@@ -112,5 +112,19 @@
 	"footer_limits": "What this app cannot protect",
 	"footer_source": "Source code",
 	"error_title": "Page not found",
-	"error_body": "Check the address, or go back to Home."
+	"error_body": "Check the address, or go back to Home.",
+	"inc_type_baton_charge": "Baton charge / beating",
+	"inc_type_crowd_weapons": "Tear gas / crowd-control weapons",
+	"inc_type_firing": "Firing / live ammunition",
+	"inc_type_assault": "Assault / physical violence",
+	"inc_type_sexual_violence": "Sexual violence",
+	"inc_type_detention": "Detention / arrest",
+	"inc_type_custody_abuse": "Abuse or torture in custody",
+	"inc_type_death": "Death in custody or protest",
+	"inc_type_denied_care": "Denied medical or legal help",
+	"inc_type_incommunicado": "Held incommunicado / disappearance",
+	"inc_type_surveillance": "Surveillance",
+	"inc_type_network_shutdown": "Network or communications shutdown",
+	"inc_type_property_damage": "Property damage / demolition",
+	"inc_type_intimidation": "Threats or intimidation"
 }

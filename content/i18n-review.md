@@ -11,6 +11,7 @@ low-risk content and stays marked draft until a person confirms it.
 | `apps/web/messages/en.json` | all | authored against the plain-language rules; safety strings pending second-person review | UNASSIGNED |
 | `apps/web/messages/hi.json`: frozen strings from PRD §15 (heroes, tab labels, the four checking labels) | `hero_*`, `nav_*`, `label_team`, `label_nearby`, `label_unchecked`, `label_problem` | sourced verbatim from PRD §15 (human-authored) | PRD §15 |
 | `apps/web/messages/hi.json`: everything else | remainder | DRAFT: needs a named human reviewer before M1 ships | UNASSIGNED |
+| `apps/web/messages/{en,hi}.json`: incident-type taxonomy | `inc_type_*` (14) | frozen closed set (PRD §2); EN authored to the plain-language rules, HI DRAFT, needs a named reviewer before `incidents_publish` flips | UNASSIGNED |
 
 ## M1 blockers (P1, ARCHITECTURE §18.5)
 
