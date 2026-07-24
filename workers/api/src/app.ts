@@ -122,6 +122,21 @@ app.get('/api/directory/pack', async (c) => {
 	}
 });
 
+// GET /api/intake/status — public feature-flag booleans so the client can show
+// or hide the off-device send / directory-write affordances. Not sensitive.
+// Fail-closed to OFF; brief cache. The Workers remain the authoritative gate.
+app.get('/api/intake/status', async (c) => {
+	const [recordIntake, directoryIntake] = await Promise.all([
+		featureAvailable(c.env.FLAGS, 'record_intake', { disabledUnderHeightenedThreat: true }),
+		featureAvailable(c.env.FLAGS, 'directory_intake', { disabledUnderHeightenedThreat: true })
+	]);
+	return c.json(
+		{ record_intake: recordIntake, directory_intake: directoryIntake },
+		200,
+		{ 'cache-control': 'public, max-age=30' }
+	);
+});
+
 app.notFound((c) => c.text('not found', 404));
 
 /** Cron: rebuild the public incident index from admitted rows only. */
