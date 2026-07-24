@@ -12,9 +12,11 @@ const paraglide: Handle = ({ event, resolve }) =>
 	});
 
 // Security-header baseline for dynamic responses (ARCHITECTURE §17.5).
-// Prerendered pages get the same baseline from static/_headers, and their CSP
-// from the kit.csp meta tag. Trusted Types enforcement starts on dynamic
-// responses; static enforcement tightens at M1 after framework verification.
+// Prerendered pages (nearly all traffic here) get the baseline + a CSP with
+// `require-trusted-types-for 'script'` from static/_headers, and their script-src
+// CSP from the kit.csp meta tag. Trusted Types is now enforced on BOTH paths and
+// gate-csp checks both. (The app is verified Trusted-Types-clean at runtime by
+// the qa-sweep + csp e2e; there are no @html/innerHTML sinks.)
 const security: Handle = async ({ event, resolve }) => {
 	const started = Date.now();
 	const response = await resolve(event);

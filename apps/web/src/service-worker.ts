@@ -11,8 +11,16 @@
 //   in a cache by accident. Anything not precached is network-only.
 // - Never cache privileged or sensitive paths (the console is a different
 //   hostname and never reaches this worker; API paths are not precached).
-// - The signed {path:sha256} manifest check lands at M1 with the key ceremony;
-//   until then this worker still only serves same-origin, build-listed assets.
+//
+// Signed {path:sha256} manifest verification (§5.6) is DEFERRED, deliberately:
+// it is inert without a signed manifest (which needs the offline key that does
+// not exist until the ceremony), and per §9.5 it would give broad-tamper
+// DETECTION, not targeted-hit PREVENTION — the OS-signature-verified APK is the
+// real fix, and the honest-limits page says so. Shipping minisign verification
+// inside the offline-critical SW now would add weight and install-time cost on
+// 2G for zero security benefit until the manifest is signed. The live XSS/
+// code-injection hardening that IS effective now (strict nonce/hash CSP +
+// Trusted Types on every served page) ships in _headers + kit.csp instead.
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
 import { build, files, prerendered, version } from '$service-worker';
@@ -40,7 +48,9 @@ sw.addEventListener('activate', (event) => {
 	event.waitUntil(
 		caches
 			.keys()
-			.then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+			.then((keys) =>
+				Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))
+			)
 			.then(() => sw.clients.claim())
 	);
 });
@@ -52,9 +62,7 @@ sw.addEventListener('fetch', (event) => {
 	if (url.origin !== location.origin) return;
 
 	if (ASSET_SET.has(url.pathname)) {
-		event.respondWith(
-			caches.match(url.pathname).then((cached) => cached ?? fetch(request))
-		);
+		event.respondWith(caches.match(url.pathname).then((cached) => cached ?? fetch(request)));
 		return;
 	}
 
