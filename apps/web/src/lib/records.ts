@@ -38,6 +38,8 @@ export interface LocalRecord {
 	createdAt: number; // device clock; stays on device
 	/** True only after the user confirmed faces/IDs are hidden. False => vault-only. */
 	redactionConfirmed: boolean;
+	/** Set once the record has been sent off device (only possible when record_intake is on). */
+	sent?: boolean;
 	derivative?: Derivative;
 	original?: SealedOriginal;
 }

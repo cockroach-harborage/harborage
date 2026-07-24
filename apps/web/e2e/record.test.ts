@@ -18,6 +18,8 @@ test('a note record is kept on this phone only', async ({ page }) => {
 	await expect(page.getByRole('heading', { name: 'Saved on this phone' })).toBeVisible();
 	await page.goto('/record');
 	await expect(page.getByText('Detention / arrest')).toBeVisible();
+	// record_intake is OFF, so the off-device send affordance must stay hidden.
+	await expect(page.getByRole('button', { name: 'Send to archive' })).toHaveCount(0);
 });
 
 test('a photo is sealed on-device with no public copy (keep private only)', async ({ page }) => {
