@@ -3,26 +3,15 @@
  * These are the ONLY labels shown to the public — never a score, never AI
  * machinery, never "verified" unless a person verified it. Internal states map
  * down to one of four kinds; colour is decoration only, the word is the signal.
+ *
+ * The state -> kind mapping lives in verification-map.ts, which imports nothing,
+ * so it can be unit-tested without the paraglide runtime.
  */
 import { m } from '$lib/paraglide/messages.js';
+import type { LabelKind } from './verification-map.ts';
 
-export type LabelKind = 'team' | 'nearby' | 'unchecked' | 'problem';
-
-/** Incident verification_state -> public label kind. Only team/nearby ever go public. */
-export function incidentLabelKind(state: string): LabelKind {
-	if (state === 'Verified' || state === 'Human-Verified') return 'team';
-	if (state === 'Community-Corroborated' || state === 'Corroborating') return 'nearby';
-	if (state === 'Disputed' || state === 'Debunked') return 'problem';
-	return 'unchecked';
-}
-
-/** Directory verification_state -> public label kind. */
-export function directoryLabelKind(state: string): LabelKind {
-	if (state === 'Signed' || state === 'Verified') return 'team';
-	if (state === 'Corroborating') return 'nearby';
-	if (state === 'Quarantined') return 'problem';
-	return 'unchecked'; // SelfListed, Stale
-}
+export { incidentLabelKind, directoryLabelKind } from './verification-map.ts';
+export type { LabelKind } from './verification-map.ts';
 
 const LABELS: Record<LabelKind, () => string> = {
 	team: m.label_team,

@@ -12,7 +12,9 @@ const DEMO = {
 			occurred_date: '2026-07-20',
 			region_bucket: 'IN-DL',
 			narrative: 'Several people held near the march.',
-			verification_state: 'Verified',
+			// 'Human-Verified' is the canonical state (§18.1 retired the bare
+			// 'Verified' vocabulary). Only human review earns the team label.
+			verification_state: 'Human-Verified',
 			corroboration_count: 5
 		},
 		{

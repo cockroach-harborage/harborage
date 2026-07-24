@@ -44,15 +44,20 @@
 	]);
 
 	function quickExit() {
-		// One tap: clear sensitive view state, replace to Home so Back does not
-		// return to the page you were on. Honest limit: recent-apps and browser
-		// history are not fully hidden on web until the APK (see /limits).
+		// One tap: clear sensitive view state, replace so Back does not return to
+		// the page you were on. Honest limit: recent-apps and browser history are
+		// not fully hidden on web until the APK (see /limits).
+		//
+		// Lands on the Directory, not Home. The safe-mode copy has always promised
+		// "Close ... opens the Directory", and it is the better destination under
+		// duress: a plain list of organisations is unremarkable cover, whereas
+		// Home leads with the document-an-incident action.
 		try {
 			sessionStorage.clear();
 		} catch {
 			/* storage may be unavailable; still navigate */
 		}
-		location.replace(localizeHref('/'));
+		location.replace(localizeHref('/directory'));
 	}
 
 	onMount(() => {

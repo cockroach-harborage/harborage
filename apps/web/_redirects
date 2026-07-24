@@ -1,0 +1,19 @@
+# English is the unprefixed canonical locale; Hindi is /hi/. So /en/... is not a
+# real path — but it is the first URL anyone who has seen /hi/... will guess,
+# and it was returning 522.
+#
+# Why 522 and not 404: hooks.ts `reroute` de-localizes /en/limits to /limits,
+# SvelteKit sees the target is prerendered and re-fetches it over the network,
+# and that subrequest goes to this Worker's own custom domain, which has no
+# origin behind it. The edge times out. (An unknown path like /en/nope is not
+# prerendered, so it never takes that branch and 404s correctly.)
+#
+# This must be fixed at the edge. The self-fetch happens inside SvelteKit's
+# respond path BEFORE hooks.server.ts runs, so a `handle` hook can never
+# intercept it. Static Assets evaluates _redirects before the Worker.
+#
+# It matters beyond tidiness: for users trained to read an outage as blocking,
+# a permanent, guessable "522: Connection timed out" is indistinguishable from
+# the site being censored.
+/en     /         301
+/en/*   /:splat   301

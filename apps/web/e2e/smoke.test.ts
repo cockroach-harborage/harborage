@@ -21,10 +21,13 @@ test('hindi locale renders the frozen hero strings', async ({ page }) => {
 	await expect(page.getByRole('link', { name: /मदद दें/ })).toBeVisible();
 });
 
-test('quick-exit replaces to Home with no Back trail', async ({ page }) => {
+test('quick-exit replaces to the Directory with no Back trail', async ({ page }) => {
 	await page.goto('/stay-safe');
 	await page.getByRole('button', { name: 'Close' }).click();
-	await page.waitForURL((url) => url.pathname === '/');
+	// The Directory, not Home: this is what the safe-mode copy promises, and a
+	// plain list of organisations is better cover than a page whose hero is the
+	// document-an-incident action. This test previously locked in the wrong one.
+	await page.waitForURL((url) => url.pathname === '/directory');
 	// location.replace means Back must not return to the sensitive page.
 	await page.goBack().catch(() => null);
 	expect(new URL(page.url()).pathname).not.toBe('/stay-safe');

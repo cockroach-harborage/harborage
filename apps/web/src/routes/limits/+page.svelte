@@ -30,6 +30,11 @@
 		() => m.limits_5(),
 		() => m.limits_6(),
 		() => m.limits_7(),
+		// Media originals and the written note have different custody. Saying
+		// "what you send sealed, we cannot read" over both was true of the photo
+		// and false of the note, which is destined for the public record.
+		() => m.limits_7a(),
+		() => m.limits_7b(),
 		() => m.limits_8(),
 		() => m.limits_9(),
 		() => m.limits_10(),

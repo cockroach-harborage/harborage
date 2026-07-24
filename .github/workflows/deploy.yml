@@ -232,6 +232,20 @@ jobs:
             sleep 15
           done
           [ "$code" = "200" ] || { echo "public app returned $code after retries"; exit 1; }
+          # Smoke a real matrix, not just "/". A 522 on every /en/* URL sat in
+          # production unnoticed because nothing here or in CI ever requested
+          # one: the failure only exists behind a Worker Custom Domain, so
+          # wrangler dev cannot reproduce it. Anything >= 400 is a failure;
+          # 301 on the /en/* rows is the expected redirect.
+          fails=0
+          for path in / /hi /stay-safe /directory /incidents /limits /hi/limits /hi/stay-safe /en /en/limits; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://${ZONE_NAME}${path}" || echo 000)
+            case "$code" in
+              2*|3*) echo "ok   $path -> $code" ;;
+              *)     echo "FAIL $path -> $code"; fails=$((fails+1)) ;;
+            esac
+          done
+          [ "$fails" -eq 0 ] || { echo "$fails route(s) failed the smoke matrix"; exit 1; }
           # Console check fails closed: only a 200 (reachable without Access)
           # fails; 302 (Access redirect) and 000 (not up) both pass.
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://console.${ZONE_NAME}/")
