@@ -27,3 +27,12 @@ tools/gates/    CI enforcement gates
 ## Security
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) §9 and the standards in [CLAUDE.md](./CLAUDE.md). Report vulnerabilities privately; a disclosure policy ships at `/.well-known/security.txt`. De-anonymization, redaction-bypass, and code-injection findings are treated as highest severity.
+
+## License
+
+- **Code** — [GNU AGPL-3.0-or-later](./LICENSE).
+- **Content** in [`content/`](./content/) (directives, rights explainers, crisis cards, directory seed) — [CC BY-SA 4.0](./content/LICENSE).
+
+This is not incidental. The continuity plan for a forced takedown is a non-Cloudflare mirror and a community fork ([RUNBOOK.md](./RUNBOOK.md) Part C), and until this repository carried a license nobody could lawfully do either — a public repository with no license is all-rights-reserved by default. The peer-share feature hands the content pack to another phone, which also needs a grant attached.
+
+AGPL rather than a permissive license because the safety properties here live in defaults: coarse geo, fail-closed flags, irreversible redaction, honest labels. A fork that quietly removes them and runs it as a service is the realistic failure mode, and the network-use clause is what obliges that fork to publish what it changed.

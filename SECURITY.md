@@ -8,8 +8,14 @@ incident, not a bug.
 ## Report privately
 
 - GitHub private advisory: https://github.com/cockroach-harborage/harborage/security/advisories/new
-- Identity-optional encrypted intake (PGP/age key and onion drop) is published
-  with the first production release at `/.well-known/security.txt`.
+- **Identity-optional encrypted intake is NOT yet available.** This previously
+  said it ships "with the first production release". That release has now
+  happened and the channel does not exist, so the honest statement is: reporting
+  today requires a GitHub account. The age/PGP key and onion drop are a tracked
+  RUNBOOK step.
+- If you cannot safely be identified, open the advisory from a throwaway GitHub
+  account created over Tor. **Do not email us** — there is no user-facing email
+  path by design, so nothing reaches a human.
 
 Do not open a public issue for a security finding.
 
