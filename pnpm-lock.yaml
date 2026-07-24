@@ -91,6 +91,9 @@ importers:
       vite:
         specifier: ^8.1.0
         version: 8.1.5(esbuild@0.28.1)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(vite@8.1.5(esbuild@0.28.1))
       wrangler:
         specifier: ^4.114.0
         version: 4.114.0(@cloudflare/workers-types@5.20260724.1)
