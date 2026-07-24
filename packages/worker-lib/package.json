@@ -8,7 +8,8 @@
     "./types": "./src/types.ts",
     "./safe-log": "./src/safe-log.ts",
     "./flags": "./src/flags.ts",
-    "./access": "./src/access.ts"
+    "./access": "./src/access.ts",
+    "./envelope": "./src/envelope.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
