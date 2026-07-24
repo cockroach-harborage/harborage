@@ -15,5 +15,13 @@
 	"routes": [
 		{ "pattern": "cockroachharborage.org/media/*", "zone_name": "cockroachharborage.org" }
 	],
+	// The RateLimit DO class lives in harborage-api; bound cross-script (no class
+	// definition or migration here — api owns it). One shared token-bucket
+	// namespace across api + media.
+	"durable_objects": {
+		"bindings": [
+			{ "name": "RATE_LIMIT", "class_name": "RateLimit", "script_name": "harborage-api" }
+		]
+	},
 	"kv_namespaces": [{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" }]
 }

@@ -8,8 +8,10 @@ const ALLOWED = [/safe-log\.ts$/, /\.test\.ts$/, /\.spec\.ts$/, /\.d\.ts$/];
 
 const CONSOLE_RE = /\bconsole\s*\.\s*(log|info|warn|error|debug|trace)\b/;
 // Field names that must never appear as keys in a safeLog payload.
+// `ephemeral_id` is Turnstile's cross-request visitor correlator — logging it
+// on any protestor path builds a device-linked pseudo-roster (ARCHITECTURE §9.1).
 const SENSITIVE_KEY_RE =
-	/\b(ip|geo|lat|lng|latitude|longitude|location|token|secret|authorization|cookie|email|phone|body|url|mnemonic|seed|pubkey|key)\s*:/i;
+	/\b(ip|geo|lat|lng|latitude|longitude|location|token|secret|authorization|cookie|email|phone|body|url|mnemonic|seed|pubkey|key|ephemeral_id)\s*:/i;
 
 const problems = [];
 let scanned = 0;
@@ -29,7 +31,9 @@ for (const root of CODE_ROOTS) {
 			const km = call[1].match(SENSITIVE_KEY_RE);
 			if (km) {
 				const line = text.slice(0, call.index).split('\n').length;
-				problems.push(`${rel}:${line} — sensitive field ${JSON.stringify(km[1])} in safeLog payload`);
+				problems.push(
+					`${rel}:${line} — sensitive field ${JSON.stringify(km[1])} in safeLog payload`
+				);
 			}
 		}
 	}

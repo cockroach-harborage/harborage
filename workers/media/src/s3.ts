@@ -14,12 +14,42 @@ export interface CompletedPart {
 	etag: string; // as returned in the PUT response ETag header (quotes included)
 }
 
+/**
+ * Escape the three characters that must be escaped in XML element content.
+ * The literal quotes around an S3 ETag are part of its value and are left
+ * intact; only `& < >` are escaped so an injected value cannot break the frame.
+ */
+function xmlEscape(s: string): string {
+	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Validate + narrow untrusted client-supplied parts. The part list comes from
+ * the browser; an unvalidated ETag string interpolated into the signed
+ * CompleteMultipartUpload body is an injection surface. Reject anything that is
+ * not {n: positive int ≤ 10000, etag: quoted hex}. Throws on bad input.
+ */
+export function validateParts(input: unknown): CompletedPart[] {
+	if (!Array.isArray(input) || input.length === 0 || input.length > 10000)
+		throw new Error('bad parts');
+	return input.map((raw) => {
+		const p = raw as { n?: unknown; etag?: unknown };
+		if (typeof p.n !== 'number' || !Number.isInteger(p.n) || p.n < 1 || p.n > 10000)
+			throw new Error('bad part number');
+		// R2/S3 ETags for a part are a quoted hex MD5 (optionally with a "-N" suffix
+		// for multipart), e.g. "\"9b2cf5...\"". Allow only that shape.
+		if (typeof p.etag !== 'string' || !/^"[0-9a-fA-F]{32}(-\d+)?"$/.test(p.etag))
+			throw new Error('bad etag');
+		return { n: p.n, etag: p.etag };
+	});
+}
+
 /** Build the CompleteMultipartUpload request body. Pure — unit-testable offline. */
 export function buildCompleteXml(parts: CompletedPart[]): string {
 	const items = parts
 		.slice()
 		.sort((a, b) => a.n - b.n)
-		.map((p) => `<Part><PartNumber>${p.n}</PartNumber><ETag>${p.etag}</ETag></Part>`)
+		.map((p) => `<Part><PartNumber>${p.n}</PartNumber><ETag>${xmlEscape(p.etag)}</ETag></Part>`)
 		.join('');
 	return `<CompleteMultipartUpload>${items}</CompleteMultipartUpload>`;
 }

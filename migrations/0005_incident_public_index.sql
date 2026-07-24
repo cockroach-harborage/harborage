@@ -4,6 +4,8 @@
 -- (Verified / Community-Corroborated, status PUBLIC). The client fetches this
 -- whole pack and filters/searches locally, so there is NO query logging.
 -- Coarse geo only; institutional actor only (no individual identity).
+-- Only Human-Verified / Community-Corroborated land here (the §15 canonical
+-- states); Unverified is never public.
 CREATE TABLE incident_public_index (
 	id TEXT PRIMARY KEY,
 	type TEXT NOT NULL,
@@ -15,7 +17,7 @@ CREATE TABLE incident_public_index (
 	injuries INTEGER,
 	detentions INTEGER,
 	narrative TEXT,
-	verification_state TEXT NOT NULL,      -- only Verified / Community-Corroborated land here
+	verification_state TEXT NOT NULL,      -- Human-Verified / Community-Corroborated only
 	corroboration_count INTEGER NOT NULL DEFAULT 0,
 	built_bucket TEXT NOT NULL             -- coarse rebuild day
 );
