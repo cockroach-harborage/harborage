@@ -3,25 +3,25 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import { localizeHref } from '$lib/paraglide/runtime';
 	import Icon from '$lib/components/Icon.svelte';
-	import { records, type LocalRecord } from '$lib/records';
+	import { documents, type LocalDocument } from '$lib/documents';
 	import { incidentTypeLabel } from '$lib/incident-types';
 	import { getIntakeStatus, sendRecord } from '$lib/uploads';
 	import { IdbOutboxStore } from '@harborage/outbox';
 
-	let items = $state<LocalRecord[]>([]);
+	let items = $state<LocalDocument[]>([]);
 	let loaded = $state(false);
 	let thumbs = $state(new Map<string, string>());
-	// Off-device send is hidden unless record_intake is on (defaults off offline).
+	// Off-device send is hidden unless document_intake is on (defaults off offline).
 	let canSend = $state(false);
 	let sendingId = $state<string | null>(null);
 	let sendMsg = $state('');
 
 	const kindIcon: Record<string, string> = { photo: 'camera', note: 'book', audio: 'phone' };
 
-	async function handleSend(r: LocalRecord) {
+	async function handleSend(r: LocalDocument) {
 		sendingId = r.id;
 		sendMsg = '';
-		const fresh = await records.get(r.id);
+		const fresh = await documents.get(r.id);
 		if (!fresh) {
 			sendingId = null;
 			return;
@@ -29,7 +29,7 @@
 		const outcome = await sendRecord(fresh, new IdbOutboxStore(), fetch);
 		if (outcome === 'sent') {
 			fresh.sent = true;
-			await records.put(fresh);
+			await documents.put(fresh);
 			await reload();
 		} else if (outcome === 'not_open') {
 			sendMsg = m.send_not_open();
@@ -39,7 +39,7 @@
 		sendingId = null;
 	}
 
-	function makeThumbs(list: LocalRecord[]) {
+	function makeThumbs(list: LocalDocument[]) {
 		for (const url of thumbs.values()) URL.revokeObjectURL(url);
 		thumbs = new Map();
 		for (const r of list) {
@@ -48,24 +48,24 @@
 	}
 
 	async function reload() {
-		const list = await records.list();
+		const list = await documents.list();
 		makeThumbs(list);
 		items = list;
 		loaded = true;
 	}
 
 	async function remove(id: string) {
-		await records.delete(id);
+		await documents.delete(id);
 		await reload();
 	}
 
-	function dateLabel(r: LocalRecord): string {
+	function dateLabel(r: LocalDocument): string {
 		return new Date(r.createdAt).toLocaleDateString();
 	}
 
 	onMount(async () => {
 		await reload();
-		canSend = (await getIntakeStatus()).record_intake;
+		canSend = (await getIntakeStatus()).document_intake;
 	});
 	onDestroy(() => {
 		for (const url of thumbs.values()) URL.revokeObjectURL(url);
@@ -73,20 +73,20 @@
 </script>
 
 <svelte:head>
-	<title>{m.nav_record()} · {m.app_name()}</title>
+	<title>{m.nav_document()} · {m.app_name()}</title>
 </svelte:head>
 
-<h1>{m.nav_record()}</h1>
-<p class="safety-copy">{m.record_keep()}</p>
+<h1>{m.nav_document()}</h1>
+<p class="safety-copy">{m.document_keep()}</p>
 
-<a class="hero hero-primary" href={localizeHref('/record/new')}>
-	<span class="hero-title"><Icon name="camera" size={28} />{m.record_new()}</span>
-	<span class="hero-sub">{m.record_new_sub()}</span>
+<a class="hero hero-primary" href={localizeHref('/document/new')}>
+	<span class="hero-title"><Icon name="camera" size={28} />{m.document_new()}</span>
+	<span class="hero-sub">{m.document_new_sub()}</span>
 </a>
 
-<h2>{m.record_mine()}</h2>
+<h2>{m.document_mine()}</h2>
 {#if loaded && items.length === 0}
-	<p class="muted">{m.record_none()}</p>
+	<p class="muted">{m.document_none()}</p>
 {:else}
 	<div class="list">
 		{#each items as r (r.id)}
@@ -97,10 +97,10 @@
 					<Icon name={kindIcon[r.kind] ?? 'book'} />
 				{/if}
 				<span class="row-label">
-					<span class="rec-title">{r.type ? incidentTypeLabel(r.type) : m.record_untitled()}</span>
+					<span class="rec-title">{r.type ? incidentTypeLabel(r.type) : m.document_untitled()}</span>
 					<span class="card-sub"
-						>{dateLabel(r)}{r.redactionConfirmed ? '' : ` · ${m.record_private_only()}`}{r.sent
-							? ` · ${m.record_sent()}`
+						>{dateLabel(r)}{r.redactionConfirmed ? '' : ` · ${m.document_private_only()}`}{r.sent
+							? ` · ${m.document_sent()}`
 							: ''}</span
 					>
 				</span>
@@ -113,7 +113,7 @@
 					>
 				{/if}
 				<button type="button" class="rec-remove" onclick={() => remove(r.id)}
-					>{m.record_remove()}</button
+					>{m.document_remove()}</button
 				>
 			</div>
 		{/each}
@@ -123,7 +123,7 @@
 	{/if}
 {/if}
 
-<p class="muted">{m.record_location_note()}</p>
+<p class="muted">{m.document_location_note()}</p>
 
 <style>
 	.rec-row {

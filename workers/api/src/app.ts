@@ -67,7 +67,7 @@ app.post('/api/incidents/register', async (c) => {
 	// 2. Rate limit, then the fail-closed feature flag, then Turnstile.
 	if (!(await rateOk(c))) return c.text('slow down', 429);
 	if (
-		!(await featureAvailable(c.env.FLAGS, 'record_intake', { disabledUnderHeightenedThreat: true }))
+		!(await featureAvailable(c.env.FLAGS, 'document_intake', { disabledUnderHeightenedThreat: true }))
 	)
 		return c.text('not open', 403);
 	if (!(await verifyTurnstile(c.req.header('cf-turnstile-response'), c.env.TURNSTILE_SECRET)))
@@ -173,10 +173,10 @@ app.get('/api/directory/pack', async (c) => {
 // Fail-closed to OFF; brief cache. The Workers remain the authoritative gate.
 app.get('/api/intake/status', async (c) => {
 	const [recordIntake, directoryIntake] = await Promise.all([
-		featureAvailable(c.env.FLAGS, 'record_intake', { disabledUnderHeightenedThreat: true }),
+		featureAvailable(c.env.FLAGS, 'document_intake', { disabledUnderHeightenedThreat: true }),
 		featureAvailable(c.env.FLAGS, 'directory_intake', { disabledUnderHeightenedThreat: true })
 	]);
-	return c.json({ record_intake: recordIntake, directory_intake: directoryIntake }, 200, {
+	return c.json({ document_intake: recordIntake, directory_intake: directoryIntake }, 200, {
 		'cache-control': 'public, max-age=30'
 	});
 });

@@ -17,8 +17,8 @@ const ROUTES = [
 	'/stay-safe/peaceful',
 	'/stay-safe/rights',
 	'/stay-safe/notices',
-	'/record',
-	'/record/new',
+	'/document',
+	'/document/new',
 	'/nearby',
 	'/directory',
 	'/incidents',
@@ -56,7 +56,10 @@ test('every route loads with no uncaught error and no horizontal scroll', async 
 		// Assert the STATUS. This used to swallow the result of goto(), so a route
 		// returning 5xx passed as long as its error page had no horizontal scroll —
 		// which is how a permanent 522 on /en/* reached production unnoticed.
-		const res = await page.goto(route, { waitUntil: 'networkidle' });
+		// 'load', not 'networkidle': the assertions below need layout and icons,
+		// not a quiet network. networkidle waits on every route and made the
+		// shared wrangler-dev server flaky for the heavier capture/download tests.
+		const res = await page.goto(route, { waitUntil: 'load' });
 		expect(res, `no response for ${route}`).not.toBeNull();
 		expect(res!.status(), `bad status on ${route}`).toBeLessThan(400);
 		const overflow = await page.evaluate(

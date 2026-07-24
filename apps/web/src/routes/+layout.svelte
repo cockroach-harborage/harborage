@@ -33,7 +33,7 @@
 			label: m.nav_stay_safe(),
 			active: path.startsWith('/stay-safe')
 		},
-		{ href: '/record', icon: 'camera', label: m.nav_record(), active: path.startsWith('/record') },
+		{ href: '/document', icon: 'camera', label: m.nav_document(), active: path.startsWith('/document') },
 		{ href: '/nearby', icon: 'compass', label: m.nav_nearby(), active: path.startsWith('/nearby') },
 		{
 			href: '/directory',

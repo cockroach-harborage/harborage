@@ -36,7 +36,7 @@ const ENTRIES = {
 async function seed(page: import('@playwright/test').Page, directoryIntake: boolean) {
 	await page.route('**/api/directory/pack', (r) => r.fulfill({ json: ENTRIES }));
 	await page.route('**/api/intake/status', (r) =>
-		r.fulfill({ json: { record_intake: false, directory_intake: directoryIntake } })
+		r.fulfill({ json: { document_intake: false, directory_intake: directoryIntake } })
 	);
 }
 
@@ -77,9 +77,9 @@ test('report-a-problem routes to gate when directory_intake is on', async ({ pag
 	await page.route('**/api/directory/report', (r) => r.fulfill({ json: { ok: true } }));
 	await page.goto('/directory');
 
-	const report = page.getByRole('button', { name: 'Report a problem' }).first();
-	await expect(report).toBeVisible();
-	await report.click();
+	const flagBtn = page.getByRole('button', { name: 'Report a problem' }).first();
+	await expect(flagBtn).toBeVisible();
+	await flagBtn.click();
 	await page.getByRole('button', { name: 'Not safe' }).click();
 	await expect(page.getByText('Thanks. A person will check this.')).toBeVisible();
 });

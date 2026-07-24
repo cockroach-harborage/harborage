@@ -4,7 +4,7 @@
  * transferable buffers back into the SealedOriginal / Derivative shapes the record
  * store holds. Redaction UI lives in the calling component; this only moves bytes.
  */
-import type { Derivative, SealedOriginal } from '$lib/records';
+import type { Derivative, SealedOriginal } from '$lib/documents';
 
 export interface Box {
 	x: number;

@@ -31,9 +31,9 @@
 		<span class="row-label">{m.gh_talk()}</span>
 		<span class="chev"><Icon name="chevron" size={18} /></span>
 	</a>
-	<a class="list-row" href={localizeHref('/record')}>
+	<a class="list-row" href={localizeHref('/document')}>
 		<Icon name="camera" />
-		<span class="row-label">{m.gh_record()}</span>
+		<span class="row-label">{m.gh_document()}</span>
 		<span class="chev"><Icon name="chevron" size={18} /></span>
 	</a>
 	<a class="list-row" href={localizeHref('/directory')}>
