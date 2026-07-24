@@ -44,13 +44,15 @@
 	]);
 
 	function quickExit() {
-		// One tap: clear sensitive view state, land on the neutral Directory view.
+		// One tap: clear sensitive view state, replace to Home so Back does not
+		// return to the page you were on. Honest limit: recent-apps and browser
+		// history are not fully hidden on web until the APK (see /limits).
 		try {
 			sessionStorage.clear();
 		} catch {
 			/* storage may be unavailable; still navigate */
 		}
-		location.assign(localizeHref('/directory'));
+		location.replace(localizeHref('/'));
 	}
 
 	onMount(() => {
@@ -88,7 +90,7 @@
 			{otherLocale === 'hi' ? 'अ' : 'A'}
 		</a>
 		<button class="topbar-btn" onclick={toggleTheme} aria-label={m.theme_toggle()}>
-			<Icon name="theme" />
+			<Icon name={theme === 'dark' ? 'moon' : 'sun'} />
 			<span class="visually-hidden">{m.theme_toggle()}</span>
 		</button>
 		{#if isHome}

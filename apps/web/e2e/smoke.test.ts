@@ -21,10 +21,13 @@ test('hindi locale renders the frozen hero strings', async ({ page }) => {
 	await expect(page.getByRole('link', { name: /मदद दें/ })).toBeVisible();
 });
 
-test('quick-exit lands on the neutral directory view', async ({ page }) => {
+test('quick-exit replaces to Home with no Back trail', async ({ page }) => {
 	await page.goto('/stay-safe');
 	await page.getByRole('button', { name: 'Close' }).click();
-	await page.waitForURL('**/directory');
+	await page.waitForURL((url) => url.pathname === '/');
+	// location.replace means Back must not return to the sensitive page.
+	await page.goBack().catch(() => null);
+	expect(new URL(page.url()).pathname).not.toBe('/stay-safe');
 });
 
 test('offline cold boot serves precached pages', async ({ page, context }) => {
