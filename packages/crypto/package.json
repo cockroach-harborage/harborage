@@ -8,6 +8,7 @@
 		"./minisign": "./src/minisign.ts",
 		"./pack": "./src/pack.ts",
 		"./notice": "./src/notice.ts",
+		"./canary": "./src/canary.ts",
 		"./sodium": "./src/sodium.ts"
 	},
 	"scripts": {

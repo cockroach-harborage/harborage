@@ -31,7 +31,7 @@ Click-by-click values and the exact dashboard strings for every step below live 
 ## Part B — Rare recurring (mostly "edit a var/secret, re-run the workflow")
 
 - **Quarterly API-token rotation (MUST stay manual — security):** create the replacement token → update the GitHub Environment secret → re-run deploy → revoke the old token. Order matters.
-- **Warrant-canary (re)signing (MUST stay manual — offline key):** on schedule, sign the canary offline with the offline key, commit the signed artifact; CI only publishes it. A missing/expired signature is itself the signal — never automate the signing.
+- **Warrant-canary establishment + (re)signing (MUST stay manual — offline key):** the mechanism ships built (client verify + freshness in `packages/crypto/src/canary.ts`; the `/limits` surface; the template at `apps/web/static/.well-known/canary.txt`). To establish it after the offline ceremony: (a) pin the canary public key in `PINNED_CANARY_PUBKEYS` (`apps/web/src/lib/canary.ts`); (b) the operators complete the statement, `Issued:`, and `Valid until:` lines in `canary.txt`; (c) sign `canary.txt` offline and commit `canary.txt.minisig`. Re-sign on schedule before each `Valid until` lapses. CI only publishes; **never automate the signing** — a missing/invalid/expired signature is itself the signal (the app shows a protective posture).
 - **Production deploy approval (deliberate manual gate):** the `production` environment's required reviewer.
 - **Add/remove a console admin:** edit `ADMIN_HANDLES`, re-run deploy.
 - **Email verification / DKIM:** paste the verification TXT then DKIM records when the mailbox is provisioned; raise DMARC to `p=quarantine`.
