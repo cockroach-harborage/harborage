@@ -1,4 +1,14 @@
 {
-  "comment": "Every sensitive intake endpoint (E2E-sealed body required) must be listed here. gate-sealed-body.mjs requires a rejection test per entry. First entries land at M1 with workers/api.",
-  "endpoints": ["POST /api/incidents/register"]
+	"comment": "Every sensitive intake endpoint must be listed here with its custody CLASS, and gate-sealed-body.mjs enforces a real rejection test per entry. The class is load-bearing: 'sealed' is not one property. Calling a platform-readable body E2E is the kind of overclaim CLAUDE.md treats as a correctness failure, not a wording preference.",
+	"classes": {
+		"SEALED-E2E": "The platform holds NO key and exposes no unwrap endpoint. 'We cannot produce plaintext' is literally true. No worker may hold a matching private key or unseal secret — the gate checks for one.",
+		"SEALED-TO-PLATFORM": "Hop confidentiality and blast-radius hardening only. The body is sealed in transit and at rest in the queue, but a platform-side key can open it by design. Buys real defence against a compromised edge worker or accidental logging. Buys NOTHING against legal compulsion, which is the stated adversary. Never describe this class as end-to-end."
+	},
+	"endpoints": [
+		{
+			"endpoint": "POST /api/incidents/register",
+			"class": "SEALED-TO-PLATFORM",
+			"note": "The incident note is PUBLIC-PLAINTEXT-destined: it is meant to become the public incident record, so the consumer must be able to read it. The evidence ORIGINAL is a separate object and stays SEALED-E2E (reporter + off-platform custodian, no key on the platform, no unwrap endpoint). Honest-limits copy must keep those two apart."
+		}
+	]
 }

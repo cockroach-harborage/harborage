@@ -1,7 +1,17 @@
+# Security headers for static/prerendered responses (ARCHITECTURE §17.5).
+#
+# This CSP deliberately carries NO script-src, style-src or default-src. Those
+# live in svelte.config.js, where SvelteKit appends the hashes for its inline
+# hydration bootstrap. Two CSP policies are enforced independently, so a
+# script-src here (or a default-src falling back to one) would lack those
+# hashes and block hydration on every prerendered page.
+#
+# frame-ancestors is here rather than only in the meta policy because browsers
+# ignore frame-ancestors in a meta tag.
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   X-Frame-Options: DENY
   Permissions-Policy: geolocation=(), camera=(self), microphone=(self)
   Cross-Origin-Opener-Policy: same-origin
-  Content-Security-Policy: object-src 'none'; base-uri 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'
+  Content-Security-Policy: connect-src 'self' https://*.r2.cloudflarestorage.com; img-src 'self' blob: data:; font-src 'self'; worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'
