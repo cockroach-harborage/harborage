@@ -16,4 +16,5 @@ export * from './mnemonic.ts';
 export * from './hkdf-tree.ts';
 export * from './seal.ts';
 export * from './minisign.ts';
+export * from './pack.ts';
 export * from './shamir.ts';

@@ -1,22 +1,26 @@
 /**
- * Signed content-pack verification (ARCHITECTURE §5.6). Knowledge packs (crisis
- * cards, directory seed, taxonomy) are signed by the offline m-of-n project key
- * and verified in-app against the pinned public key. Verify-only.
+ * Signed content-pack verification for the app (ARCHITECTURE §5.6). The pack
+ * logic lives in the frozen crypto module (packages/crypto/src/pack.ts, under
+ * CODEOWNERS); this file only binds it to the app's pinned key list. Verify-only
+ * — signing happens offline (RUNBOOK), never in this codebase.
  *
- * The pinned key is published by the offline key ceremony (RUNBOOK) and set here
- * once known. Until then it is empty: bundled packs render as DRAFT (with the
- * banner), and no fetched pack is trusted without a verifying signature.
+ * Trust is cryptographic: a valid minisign signature over the exact pack bytes,
+ * plus a self-consistent {path:sha256} manifest. It is NEVER a self-asserted
+ * field inside the content. Until the offline key ceremony pins a project key,
+ * PINNED_PACK_PUBKEYS is empty, every verify fails closed, and bundled packs
+ * render with the DRAFT banner.
  */
-import { parsePublicKey, verifyMinisign } from '@harborage/crypto';
+import { verifyPack } from '@harborage/crypto';
+export { parsePack, verifyPackManifest, canonicalJson, type Pack } from '@harborage/crypto';
 
-export const PINNED_PACK_PUBKEY = '';
+/**
+ * Pinned project public keys (minisign format), epoch-aware: a rotation adds the
+ * new key here without dropping the old until every signed pack is re-signed.
+ * EMPTY until the offline key ceremony (RUNBOOK) — verification fails closed.
+ */
+export const PINNED_PACK_PUBKEYS: readonly string[] = [];
 
-/** True only if a detached minisign signature verifies against the pinned key. */
+/** True only if the pack is signed by a pinned key AND its manifest is consistent. */
 export function verifyContentPack(packBytes: Uint8Array, signatureFile: string): boolean {
-	if (!PINNED_PACK_PUBKEY) return false;
-	try {
-		return verifyMinisign(parsePublicKey(PINNED_PACK_PUBKEY), packBytes, signatureFile).valid;
-	} catch {
-		return false;
-	}
+	return verifyPack(packBytes, signatureFile, PINNED_PACK_PUBKEYS);
 }

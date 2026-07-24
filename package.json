@@ -1,23 +1,25 @@
 {
-  "name": "harborage",
-  "private": true,
-  "version": "0.0.0",
-  "packageManager": "pnpm@10.18.3",
-  "engines": {
-    "node": ">=22.12"
-  },
-  "scripts": {
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
-    "gates": "node tools/gates/run-all.mjs",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
-  },
-  "devDependencies": {
-    "prettier": "^3.6.0",
-    "prettier-plugin-svelte": "^4.1.1",
-    "typescript": "^6.0.3",
-    "wrangler": "4.113.0"
-  }
+	"name": "harborage",
+	"private": true,
+	"version": "0.0.0",
+	"packageManager": "pnpm@10.18.3",
+	"engines": {
+		"node": ">=22.12"
+	},
+	"scripts": {
+		"build": "pnpm -r build",
+		"typecheck": "pnpm -r typecheck",
+		"test": "pnpm -r test",
+		"gates": "node tools/gates/run-all.mjs",
+		"pack:build": "node tools/pack/build-pack.mjs",
+		"pack:verify": "node tools/pack/verify-pack.mjs",
+		"format": "prettier --write .",
+		"format:check": "prettier --check ."
+	},
+	"devDependencies": {
+		"prettier": "^3.6.0",
+		"prettier-plugin-svelte": "^4.1.1",
+		"typescript": "^6.0.3",
+		"wrangler": "4.113.0"
+	}
 }

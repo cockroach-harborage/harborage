@@ -72,9 +72,15 @@ manual steps first (each is a readiness gate, not a code change):
   moderation org to process the `moderation-bulk` queue, plus the Turnstile secret.
 - **`incidents_publish` (public browse).** Needs `Verified`/`Community-Corroborated`
   rows (the M2 trust engine writes them) and the counsel gate on the public record.
-- **Crisis-card draft banner drops.** After the offline key ceremony, pin the
-  project public key in `apps/web/src/lib/content-pack.ts` (`PINNED_PACK_PUBKEY`)
-  and ship a counsel/medic-signed pack (`review_state=signed`).
+- **Crisis-card draft banner drops.** The signed-pack pipeline is built
+  (`tools/pack` builds a deterministic `.harborage-pack`; `packages/crypto`
+  verifies a minisign signature over it against a pinned key). To flip it live
+  after the offline key ceremony: (a) add the ceremony public key to
+  `PINNED_PACK_PUBKEYS` in `apps/web/src/lib/content-pack.ts`; (b) sign the
+  built `apps/web/static/packs/crisis-cards-v1.harborage-pack` offline and set
+  the detached signature as `CRISIS_PACK_SIGNATURE` in
+  `apps/web/src/lib/crisis-cards.ts`. Trust then comes from the signature, not a
+  content field. Counsel/medic content review is a separate readiness gate.
 
 ## What must stay manual, and why
 

@@ -62,6 +62,9 @@ jobs:
       - name: Enforcement gates
         run: pnpm gates
 
+      - name: Signed packs match source
+        run: pnpm pack:verify
+
       - name: Unit tests
         run: pnpm test
 
