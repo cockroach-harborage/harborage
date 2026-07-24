@@ -12,8 +12,7 @@ import type {
 	DurableObjectNamespace,
 	Fetcher,
 	KVNamespace,
-	Queue,
-	R2Bucket
+	Queue
 } from '@cloudflare/workers-types';
 
 /** Fail-closed feature flags. Read via flags.ts only — never gate on raw KV. */
@@ -38,12 +37,14 @@ export interface ConsoleEnv extends FlagBindings {
 	ACCESS_TEAM_DOMAIN: string;
 }
 
-/** workers/api — M1. DO classes join per the §18.3 milestone column. */
+/**
+ * workers/api — M1. DO classes join per the §18.3 milestone column. The api does
+ * not bind R2: the media Worker owns all R2 access (S3 presign), so the api Env
+ * (and deploy token) need no R2 scope.
+ */
 export interface ApiEnv extends FlagBindings {
 	DB: D1Database;
 	RATE_LIMIT: DurableObjectNamespace;
-	EVIDENCE_VAULT: R2Bucket;
-	PUBLIC_MEDIA: R2Bucket;
 	MODERATION_BULK: Queue;
 	LIFE_SAFETY: Queue;
 	/** Turnstile secret (wrangler secret, set at intake switch-on). Empty ⇒ verify fails closed. */
