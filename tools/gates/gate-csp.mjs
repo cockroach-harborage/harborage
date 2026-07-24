@@ -35,6 +35,28 @@ if (existsSync(webDir)) {
 			if (!text.includes(header)) problems.push(`hooks.server.ts: missing ${header}`);
 		}
 	}
+
+	// Every route is prerendered, so hooks.server.ts does not run at request time —
+	// static/_headers is what actually serves the CSP + baseline on those pages.
+	// Enforce Trusted Types + the header baseline there too, or prerendered pages
+	// (i.e. nearly all traffic) silently ship without them.
+	const headers = join(webDir, '_headers');
+	if (!existsSync(headers)) {
+		problems.push('apps/web/_headers missing (static security headers live there)');
+	} else {
+		const text = readFileSync(headers, 'utf8');
+		for (const needle of [
+			"require-trusted-types-for 'script'",
+			"frame-ancestors 'none'",
+			'X-Content-Type-Options',
+			'Referrer-Policy',
+			'X-Frame-Options'
+		]) {
+			if (!text.includes(needle)) problems.push(`_headers: missing ${needle}`);
+		}
+		if (/unsafe-inline|unsafe-eval/.test(text))
+			problems.push('_headers: unsafe-inline/unsafe-eval must not appear');
+	}
 }
 
 if (fail('gate-csp', problems)) process.exit(1);

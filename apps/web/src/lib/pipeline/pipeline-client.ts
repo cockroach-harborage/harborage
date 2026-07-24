@@ -21,8 +21,38 @@ export interface ProcessedImage {
 let worker: Worker | null = null;
 let seq = 0;
 
+// Trusted Types is enforced on every page (_headers). The Worker constructor is
+// a TrustedScriptURL sink, and Vite requires the `new Worker(new URL(...))`
+// literal to bundle the worker (so we cannot wrap the URL). We instead register
+// a narrow `default` Trusted Types policy that passes through SAME-ORIGIN script
+// URLs (our own bundled worker) and nothing else: it implements only
+// createScriptURL, so HTML/eval sinks (innerHTML, Function) stay blocked.
+let ttReady = false;
+interface TrustedTypesLike {
+	createPolicy(name: string, rules: { createScriptURL(u: string): string }): unknown;
+	defaultPolicy?: unknown;
+}
+function ensureTrustedTypes(): void {
+	if (ttReady) return;
+	ttReady = true;
+	const tt = (globalThis as unknown as { trustedTypes?: TrustedTypesLike }).trustedTypes;
+	if (!tt?.createPolicy || tt.defaultPolicy) return;
+	try {
+		tt.createPolicy('default', {
+			createScriptURL(u: string) {
+				if (new URL(u, location.origin).origin !== location.origin)
+					throw new Error('cross-origin script url blocked');
+				return u;
+			}
+		});
+	} catch {
+		// a default policy already exists — fine
+	}
+}
+
 function getWorker(): Worker {
 	if (!worker) {
+		ensureTrustedTypes();
 		worker = new Worker(new URL('./pipeline.worker.ts', import.meta.url), { type: 'module' });
 	}
 	return worker;
