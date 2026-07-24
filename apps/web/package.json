@@ -13,7 +13,9 @@
   "dependencies": {
     "@harborage/crypto": "workspace:*",
     "@harborage/foundry": "workspace:*",
-    "@harborage/worker-lib": "workspace:*"
+    "@harborage/outbox": "workspace:*",
+    "@harborage/worker-lib": "workspace:*",
+    "idb": "^8.0.3"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "^2.20.0",
