@@ -1,9 +1,21 @@
 # Privileged console: separate hostname behind Cloudflare Access.
-# Phishing-resistant only — no OTP of any kind. Admins authenticate through the
-# GitHub IdP and must additionally present a hardware security key registered
-# with Access (Independent MFA / auth_method "swk"). AAGUID restriction to
-# project-issued authenticators is applied per RUNBOOK if/when the provider
-# exposes it; the policy below enforces the hardware-key class.
+#
+# MFA enforcement (verified 2026-07-25): the real phishing-resistant control is
+# ORG-LEVEL Access Independent MFA — `allowed_authenticators = ["security_key",
+# "biometrics"]` (both WebAuthn), `required_aaguids` restricted to ceremony
+# hardware, AMR-matching OFF. Those live on the Zero Trust *organization*
+# (`PUT /accounts/{id}/access/organizations` → `mfa_config`), NOT on this app
+# resource, and AAGUID pinning needs real hardware AAGUIDs from the offline key
+# ceremony. They are therefore a RUNBOOK manual step (org-scoped + hardware-
+# dependent), reconciled and tested when the maintainer configures org MFA.
+# Security-key-*only* is NOT enforceable (TOTP cannot be excluded at org level).
+#
+# The policy `require` below asks the IdP to assert an MFA auth method via the
+# RFC 8176 `amr` claim. Caveat to reconcile at the org-MFA step: the GitHub IdP
+# does not assert WebAuthn AMR, and `swk` is RFC 8176 *software*-secured key
+# (hardware is `hwk`), so this `require` is a belt-and-braces IdP signal, not the
+# load-bearing control — org-level Independent MFA is. Left functionally
+# unchanged here (a live Access-policy change is a RUNBOOK §7 human-gated event).
 
 resource "cloudflare_zero_trust_access_identity_provider" "github" {
   account_id = var.account_id
