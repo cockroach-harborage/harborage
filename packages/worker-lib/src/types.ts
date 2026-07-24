@@ -46,6 +46,8 @@ export interface ApiEnv extends FlagBindings {
 	PUBLIC_MEDIA: R2Bucket;
 	MODERATION_BULK: Queue;
 	LIFE_SAFETY: Queue;
+	/** Turnstile secret (wrangler secret, set at intake switch-on). Empty ⇒ verify fails closed. */
+	TURNSTILE_SECRET?: string;
 }
 
 /** workers/media — M1 */

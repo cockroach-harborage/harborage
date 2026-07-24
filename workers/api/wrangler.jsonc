@@ -1,0 +1,44 @@
+// workers/api — pseudonymous intake + public read model (manifest §18.3).
+// A ROUTE on /api/* takes precedence over the web Custom Domain for those paths
+// (Cloudflare: routes run before a Custom Domain), so api and web share the apex
+// origin with no CORS. REPLACE_* ids are injected in CI from `tofu output`.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "harborage-api",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-07-15",
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1
+	},
+	"workers_dev": false,
+	"routes": [{ "pattern": "cockroachharborage.org/api/*", "zone_name": "cockroachharborage.org" }],
+	"durable_objects": {
+		"bindings": [{ "name": "RATE_LIMIT", "class_name": "RateLimit" }]
+	},
+	// SQLite-backed (mandatory for new namespaces, 2026-07-09) but kept wholly
+	// in-memory: the class never touches storage (gate-memory-only), so nothing
+	// persists and there is no compellable PITR record.
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimit"] }],
+	"kv_namespaces": [{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" }],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "harborage",
+			"database_id": "REPLACE_D1_ID",
+			"migrations_dir": "../../migrations"
+		}
+	],
+	"r2_buckets": [
+		{ "binding": "EVIDENCE_VAULT", "bucket_name": "harborage-evidence-vault" },
+		{ "binding": "PUBLIC_MEDIA", "bucket_name": "harborage-public-media" }
+	],
+	"queues": {
+		"producers": [
+			{ "binding": "MODERATION_BULK", "queue": "moderation-bulk" },
+			{ "binding": "LIFE_SAFETY", "queue": "life-safety" }
+		]
+	},
+	// Hourly public-index materializer (offset minute to avoid top-of-hour load).
+	"triggers": { "crons": ["17 * * * *"] }
+}
