@@ -10,4 +10,11 @@
 /.github/             @cockroach-harborage
 /infra/               @cockroach-harborage
 /tools/gates/         @cockroach-harborage
+/tools/pack/          @cockroach-harborage
+# Signed content + the pinned keys / canary the app roots trust in (ARCHITECTURE §10.6, §5.6).
+/content/             @cockroach-harborage
+/apps/web/src/lib/content-pack.ts   @cockroach-harborage
+/apps/web/src/lib/canary.ts         @cockroach-harborage
+/apps/web/src/lib/notices.ts        @cockroach-harborage
+/apps/web/static/.well-known/       @cockroach-harborage
 wrangler.jsonc        @cockroach-harborage

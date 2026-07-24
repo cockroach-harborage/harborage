@@ -1,0 +1,22 @@
+Harborage warrant canary — TEMPLATE (not yet signed)
+
+This file becomes a live warrant canary only after the operators finalize the
+statement and sign it OFFLINE with the project canary key, and the app pins that
+key. Signing stays manual and offline by design: automating it would let a
+compelled host keep the canary alive, which is a security bug.
+
+Until it is signed and the key is pinned, the app shows the canary as "not
+established" and treats the safety signal as unconfirmed. A missing, invalid, or
+expired signature is itself the signal.
+
+Statement (operators complete before signing): As of the date below, Harborage
+has not been served with any legal demand it is barred from disclosing, and no
+project signing keys have been seized or known to be compromised.
+
+Requests received (cumulative): [to be completed by operators]
+Operators: the current operator roster is published in the signed key directory.
+Issued: [date, completed at signing]
+Valid until: [date, completed at signing]
+
+Verify this document against the pinned canary key in the app. Do not trust an
+unsigned or altered copy.
