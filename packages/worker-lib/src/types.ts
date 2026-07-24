@@ -27,10 +27,12 @@ export interface WebEnv extends FlagBindings {
 	ASSETS: Fetcher;
 }
 
-/** apps/console — M0 (FlagState); M1 adds NoticeLog + CurationCoordinator. */
+/** apps/console — M0 (FlagState); M1 adds NoticeLog. */
 export interface ConsoleEnv extends FlagBindings {
 	DB: D1Database;
 	FLAG_STATE: DurableObjectNamespace;
+	/** Append-only official-notice hash-chain writer (mirrors to D1). M1. */
+	NOTICE_LOG: DurableObjectNamespace;
 	/** Access application AUD tag (wrangler secret). Empty ⇒ every request is denied. */
 	ACCESS_AUD: string;
 	/** Access team domain, e.g. "example.cloudflareaccess.com" (wrangler var). */

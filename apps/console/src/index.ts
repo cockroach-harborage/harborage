@@ -5,13 +5,16 @@
  */
 import { Hono } from 'hono';
 import { verifyAccess, type AccessIdentity } from '@harborage/worker-lib/access';
+import { flagEnabled } from '@harborage/worker-lib/flags';
 import { safeLog, statusClass } from '@harborage/worker-lib/safe-log';
 import type { ConsoleEnv } from '@harborage/worker-lib/types';
 import { FLIPPABLE, LOCKED } from './flag-policy.ts';
 import type { AuditRow, FlagRow } from './do/FlagState.ts';
 import type { FlagRecord } from '@harborage/worker-lib/flags';
+import { publishNotice, listNotices, chainStatus } from './notices.ts';
 
 export { FlagState } from './do/FlagState.ts';
+export { NoticeLog } from './do/NoticeLog.ts';
 
 interface FlagStateStub {
 	list(): Promise<FlagRow[]>;
@@ -46,8 +49,7 @@ function flagStub(env: ConsoleEnv): FlagStateStub {
 	return ns.get(ns.idFromName('global')) as unknown as FlagStateStub;
 }
 
-const esc = (s: string) =>
-	s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 app.get('/', async (c) => {
 	const stub = flagStub(c.env);
@@ -111,6 +113,69 @@ app.post('/flags/:name', async (c) => {
 	});
 	if (!result) return c.text('refused: locked or unknown flag', 403);
 	return c.redirect('/', 303);
+});
+
+// --- Official Notices: upload-a-signed-notice (never compose-and-sign) --------
+function noticesPage(opts: {
+	published: boolean;
+	notices: Awaited<ReturnType<typeof listNotices>>;
+	status: Awaited<ReturnType<typeof chainStatus>>;
+	message?: string;
+}): string {
+	const rows = opts.notices
+		.map(
+			(n) =>
+				`<tr><td>${esc(n.id)}</td><td>${esc(n.notice_type)}</td><td>epoch ${n.epoch}</td><td>${esc(n.published_at)}</td><td>${n.superseded_by ? 'superseded' : 'current'}</td></tr>`
+		)
+		.join('');
+	const banner = opts.message ? `<p class="msg">${esc(opts.message)}</p>` : '';
+	const form = opts.published
+		? `<form method="post" action="/notices">
+				<p>Paste a notice bundle signed offline by the role keys (JSON: {payload, signatures}).</p>
+				<textarea name="bundle" rows="10" cols="80" required></textarea>
+				<button>Verify and publish</button>
+			</form>`
+		: `<p>Publishing is off. Turn on <code>notices_publish</code> to open this surface.</p>`;
+	return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Official notices</title>
+<style>body{font-family:system-ui;max-width:64rem;margin:2rem auto;padding:0 1rem}table{border-collapse:collapse;width:100%;margin-bottom:2rem}td,th{border:1px solid #ccc;padding:.4rem;text-align:left}textarea{width:100%;font-family:monospace}.msg{padding:.6rem;border:1px solid #888;background:#f4f4f4}</style>
+</head><body>
+<p><a href="/">Kill switches</a></p>
+<h1>Official notices</h1>
+<p>Chain length ${opts.status.count}. Head ${esc(opts.status.head.slice(0, 16))}...</p>
+${banner}
+<h2>Publish</h2>
+<p>The server verifies the m-of-n signatures against the signed key directory and appends only a valid quorum. It holds no private keys.</p>
+${form}
+<h2>Published notices (latest 50)</h2>
+<table><tr><th>Id</th><th>Type</th><th>Epoch</th><th>Published</th><th>State</th></tr>${rows}</table>
+</body></html>`;
+}
+
+app.get('/notices', async (c) => {
+	const published = await flagEnabled(c.env.FLAGS, 'notices_publish');
+	const [notices, status] = await Promise.all([listNotices(c.env), chainStatus(c.env)]);
+	return c.html(noticesPage({ published, notices, status }));
+});
+
+app.post('/notices', async (c) => {
+	const origin = c.req.header('Origin');
+	if (origin && new URL(origin).host !== new URL(c.req.url).host) return c.text('denied', 403);
+
+	if (!(await flagEnabled(c.env.FLAGS, 'notices_publish'))) return c.text('not open', 403);
+
+	const form = await c.req.parseBody();
+	const bundle = typeof form['bundle'] === 'string' ? form['bundle'] : '';
+	const result = await publishNotice(c.env, bundle);
+	safeLog('notice_publish', {
+		outcome: result.ok ? 'published' : 'refused',
+		statusClass: statusClass(result.ok ? 200 : 403)
+	});
+	const [notices, status] = await Promise.all([listNotices(c.env), chainStatus(c.env)]);
+	return c.html(
+		noticesPage({ published: true, notices, status, message: result.message }),
+		result.ok ? 200 : 400
+	);
 });
 
 export default app;
