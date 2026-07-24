@@ -197,6 +197,17 @@ jobs:
           sed -i "s/REPLACE_KV_FLAGS_ID/${KV_FLAGS_ID}/; s/REPLACE_D1_ID/${D1_ID}/" wrangler.jsonc
           pnpm exec wrangler deploy
 
+      - name: Deploy media
+        working-directory: workers/media
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.HB_DEPLOY_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+        run: |
+          # media presigns direct-to-R2 uploads on /media/*. Behind record_intake
+          # (OFF); the R2 presign secrets are set only at intake switch-on (RUNBOOK).
+          sed -i "s/REPLACE_KV_FLAGS_ID/${KV_FLAGS_ID}/" wrangler.jsonc
+          pnpm exec wrangler deploy
+
       - name: Set console runtime secrets
         working-directory: apps/console
         env:
