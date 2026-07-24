@@ -1,0 +1,19 @@
+// workers/media — presigns direct-to-R2 uploads (manifest §18.3). Serves /media/*
+// via a route that takes precedence over the web Custom Domain (same origin).
+// Presign credentials (R2_ACCOUNT_ID, R2_PRESIGN_*) are wrangler SECRETS, set only
+// at intake switch-on (RUNBOOK) — never in this file. REPLACE_* injected in CI.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "harborage-media",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-07-15",
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1
+	},
+	"workers_dev": false,
+	"routes": [
+		{ "pattern": "cockroachharborage.org/media/*", "zone_name": "cockroachharborage.org" }
+	],
+	"kv_namespaces": [{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" }]
+}
