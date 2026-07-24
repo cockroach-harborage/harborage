@@ -53,6 +53,28 @@ Per-feature kill switches and heightened-threat mode are **runtime data** flippe
 
 ---
 
+## M1 feature switch-on prerequisites
+
+M1 code ships behind fail-closed flags (all OFF). The D1 migrations
+(`incidents`, `evidence_refs`, `resource_entries`, `incident_public_index`) and the
+`api`/`media` Workers deploy automatically; **switching a feature on** needs these
+manual steps first (each is a readiness gate, not a code change):
+
+- **`record_intake` (off-device evidence send).** (a) Mint a **bucket-scoped R2 S3
+  API token** (Cloudflare API can't self-bootstrap it) and set `R2_ACCOUNT_ID`,
+  `R2_PRESIGN_ACCESS_KEY_ID`, `R2_PRESIGN_SECRET_ACCESS_KEY` as `harborage-media`
+  secrets (`wrangler secret put`). (b) Create the **Turnstile widget** and set
+  `TURNSTILE_SECRET` on `harborage-api`; publish the sitekey for the web widget.
+  (c) Off-platform key custody + reviewer-protection process must exist (§8 gate).
+  Keep-on-phone needs none of this — it already works.
+- **`directory_intake` (provider intake + report-a-problem).** Needs the staffed
+  moderation org to process the `moderation-bulk` queue, plus the Turnstile secret.
+- **`incidents_publish` (public browse).** Needs `Verified`/`Community-Corroborated`
+  rows (the M2 trust engine writes them) and the counsel gate on the public record.
+- **Crisis-card draft banner drops.** After the offline key ceremony, pin the
+  project public key in `apps/web/src/lib/content-pack.ts` (`PINNED_PACK_PUBKEY`)
+  and ship a counsel/medic-signed pack (`review_state=signed`).
+
 ## What must stay manual, and why
 
 | Manual step | Why it can't be code |
