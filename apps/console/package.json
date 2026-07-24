@@ -1,19 +1,22 @@
 {
-  "name": "@harborage/console",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "@harborage/worker-lib": "workspace:*",
-    "hono": "^4.12.0"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^5.0.0",
-    "vitest": "^4.1.10",
-    "wrangler": "^4.112.0"
-  }
+	"name": "@harborage/console",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"typecheck": "tsc -p tsconfig.json",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@harborage/crypto": "workspace:*",
+		"@harborage/worker-lib": "workspace:*",
+		"hono": "^4.12.0"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^5.0.0",
+		"@noble/curves": "^2.2.0",
+		"@scure/base": "^2.2.0",
+		"vitest": "^4.1.10",
+		"wrangler": "^4.112.0"
+	}
 }

@@ -23,6 +23,9 @@ importers:
 
   apps/console:
     dependencies:
+      '@harborage/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
       '@harborage/worker-lib':
         specifier: workspace:*
         version: link:../../packages/worker-lib
@@ -33,6 +36,12 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^5.0.0
         version: 5.20260721.1
+      '@noble/curves':
+        specifier: ^2.2.0
+        version: 2.2.0
+      '@scure/base':
+        specifier: ^2.2.0
+        version: 2.2.0
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(vite@8.1.5(esbuild@0.28.1))
