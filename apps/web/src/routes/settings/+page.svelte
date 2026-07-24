@@ -9,7 +9,8 @@
 		{ href: '/settings/identity', icon: 'shield', label: () => m.set_identity() },
 		{ href: '/settings/safe-mode', icon: 'shield', label: () => m.set_safe_mode() },
 		{ href: '/settings/offline', icon: 'compass', label: () => m.set_offline() },
-		{ href: '/settings/how-checking-works', icon: 'book', label: () => m.set_checking() }
+		{ href: '/settings/how-checking-works', icon: 'book', label: () => m.set_checking() },
+		{ href: '/settings/share-pack', icon: 'offer', label: () => m.share_title() }
 	];
 </script>
 

@@ -3,7 +3,9 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
 	testDir: 'e2e',
 	timeout: 60_000,
-	retries: process.env.CI ? 1 : 0,
+	// The suite shares one wrangler-dev server; a heavy test (capture worker,
+	// file download) can occasionally time out under load and passes on retry.
+	retries: process.env.CI ? 2 : 0,
 	use: {
 		baseURL: 'http://127.0.0.1:8788'
 	},

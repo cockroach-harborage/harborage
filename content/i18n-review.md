@@ -13,6 +13,7 @@ low-risk content and stays marked draft until a person confirms it.
 | `apps/web/messages/hi.json`: everything else | remainder | DRAFT: needs a named human reviewer before M1 ships | UNASSIGNED |
 | `apps/web/messages/{en,hi}.json`: incident-type taxonomy | `inc_type_*` (14) | frozen closed set (PRD §2); EN authored to the plain-language rules, HI DRAFT, needs a named reviewer before `incidents_publish` flips | UNASSIGNED |
 | `apps/web/messages/{en,hi}.json`: official-notice strings | `notices_stale`, `notice_directive_warning`, `notice_unverified`, `notice_superseded`, `notices_verify_channel`, `verify_channel_*` | ★ safety-critical (the directive interstitial and the unverified warning). EN authored to the plain-language rules; HI DRAFT, needs a named reviewer before `notices_publish` flips | UNASSIGNED |
+| `apps/web/messages/{en,hi}.json`: canary + peer-share strings | `canary_*`, `share_*` | ★ safety-critical (the safety-signal state and the "do not trust an unverified copy" warning). EN authored to the plain-language rules; HI DRAFT, needs a named reviewer before the canary is established | UNASSIGNED |
 | `content/crisis-cards/cards.json` | teargas, detained, blackout, peaceful, rights (en+hi) | DRAFT, `review_state=draft`. Shows a prominent draft banner in-app. The legal cards (detained, rights) are counsel-gated; teargas is medic-gated. Both EN and HI need named counsel/medic + translator review, and an m-of-n-signed pack, before the banner drops | UNASSIGNED |
 
 ## M1 blockers (P1, ARCHITECTURE §18.5)

@@ -54,6 +54,19 @@ Per-feature kill switches and heightened-threat mode are **runtime data** flippe
 
 ---
 
+## M1 distribution readiness — not yet met
+
+The M1 gate (ARCHITECTURE §12) names "non-CF public mirror + peer QR packs".
+Status: **signed-pack file export/import ships** (`/settings/share-pack`), which
+covers offline peer sharing of the full knowledge pack (Bluetooth, SD card, any
+file app), with on-device signature verification on import. **Still not met:**
+(1) **QR peer packs** — a QR carries ~3 KB, so it would carry the revocation
+list + key fingerprint, not the whole pack; it needs a small audited QR encoder
+dependency (a decision, not a ~30-line job). (2) **Non-CF public mirror** — needs
+a second-provider account, a CI secret, and the provider host added to the deploy
+job's egress allowlist. Both are their own later slices; until then this M1
+readiness item is openly marked not-met.
+
 ## M1 feature switch-on prerequisites
 
 M1 code ships behind fail-closed flags (all OFF). The D1 migrations
