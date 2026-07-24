@@ -1,3 +1,21 @@
+# Harborage security contact.
+#
+# HONEST GAP (2026-07-25): the only channel below requires a GitHub account, so
+# reporting is currently identity-REQUIRED. CLAUDE.md commits to encrypted,
+# identity-OPTIONAL intake (age/PGP or an onion drop, never email); that key has
+# not been generated yet, and publishing a dangling Encryption: field would be
+# worse than admitting the gap. It is a tracked RUNBOOK step.
+#
+# Until it lands: if you hold a de-anonymization, redaction-bypass or
+# code-injection finding and cannot safely be identified, open the advisory from
+# a throwaway GitHub account created over Tor. Do not email us — we run no
+# user-facing email path by design, so there is nothing on the other end.
+#
+# These findings are treated as highest severity and handled under an embargo.
+# We will not publish a weaponizable flaw on a fixed disclosure clock while
+# people are relying on the tool. Researcher safe harbour is stated in the
+# policy below.
+
 Contact: https://github.com/cockroach-harborage/harborage/security/advisories/new
 Expires: 2027-07-22T00:00:00.000Z
 Preferred-Languages: en, hi

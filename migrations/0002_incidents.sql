@@ -7,7 +7,9 @@
 -- only. Individual identifiers (badge, name, plate) belong to the counsel-gated
 -- accountability path (M5), never here.
 CREATE TABLE incidents (
-	id TEXT PRIMARY KEY,                       -- opaque ULID; no time/identity/location encoded
+	id TEXT PRIMARY KEY,                       -- opaque 26-char id; no time, identity, or area encoded
+	                                           -- (deliberately NOT a real ULID: a ULID encodes a
+	                                           -- millisecond timestamp in its first 48 bits)
 	type TEXT NOT NULL,                        -- closed taxonomy key (see apps/web incident-types)
 	occurred_date TEXT,                        -- day granularity, YYYY-MM-DD (no precise clock time)
 	time_window TEXT,                          -- coarse window label (e.g. morning / afternoon / night)
