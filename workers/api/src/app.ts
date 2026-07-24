@@ -104,9 +104,9 @@ app.post('/api/directory/report', async (c) => {
 // and filters/searches locally, so there is no per-query server request.
 app.get('/api/incidents/index', async (c) => {
 	if (!(await flagEnabled(c.env.FLAGS, 'incidents_publish')))
-		return c.json({ incidents: [] }, 200, { 'cache-control': 'public, max-age=60' });
+		return c.json({ published: false, incidents: [] }, 200, { 'cache-control': 'public, max-age=60' });
 	const { results } = await c.env.DB.prepare('SELECT * FROM incident_public_index').all();
-	return c.json({ incidents: results }, 200, { 'cache-control': 'public, max-age=300' });
+	return c.json({ published: true, incidents: results }, 200, { 'cache-control': 'public, max-age=300' });
 });
 
 // GET /api/directory/pack — public directory rows. Reads are day-1 core and stay

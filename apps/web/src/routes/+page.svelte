@@ -21,6 +21,12 @@
 			icon: 'book',
 			title: () => m.nav_directory(),
 			sub: () => m.card_directory_sub()
+		},
+		{
+			href: '/incidents',
+			icon: 'globe',
+			title: () => m.home_incidents(),
+			sub: () => m.home_incidents_sub()
 		}
 	];
 </script>
