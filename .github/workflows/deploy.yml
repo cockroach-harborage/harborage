@@ -153,10 +153,11 @@ jobs:
           KV_FLAGS_ID=$(tofu output -raw kv_flags_id)
           KV_CONFIG_ID=$(tofu output -raw kv_config_id)
           KV_I18N_ID=$(tofu output -raw kv_i18n_id)
+          KV_KEYDIR_CACHE_ID=$(tofu output -raw kv_keydir_cache_id)
           D1_ID=$(tofu output -raw d1_harborage_id)
           ACCESS_AUD=$(tofu output -raw access_console_aud)
           echo "::add-mask::${ACCESS_AUD}"
-          for id_var in KV_FLAGS_ID KV_CONFIG_ID KV_I18N_ID D1_ID ACCESS_AUD; do
+          for id_var in KV_FLAGS_ID KV_CONFIG_ID KV_I18N_ID KV_KEYDIR_CACHE_ID D1_ID ACCESS_AUD; do
             echo "${id_var}=${!id_var}" >> "$GITHUB_ENV"
           done
 
@@ -194,7 +195,7 @@ jobs:
           # api serves /api/* via a route that takes precedence over the web
           # Custom Domain. All writes ship behind fail-closed flags (OFF); the
           # Turnstile secret is set only at intake switch-on (RUNBOOK).
-          sed -i "s/REPLACE_KV_FLAGS_ID/${KV_FLAGS_ID}/; s/REPLACE_D1_ID/${D1_ID}/" wrangler.jsonc
+          sed -i "s/REPLACE_KV_FLAGS_ID/${KV_FLAGS_ID}/; s/REPLACE_KV_KEYDIR_CACHE_ID/${KV_KEYDIR_CACHE_ID}/; s/REPLACE_D1_ID/${D1_ID}/" wrangler.jsonc
           pnpm exec wrangler deploy
 
       - name: Deploy media

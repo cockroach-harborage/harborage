@@ -20,7 +20,11 @@
 	// in-memory: the class never touches storage (gate-memory-only), so nothing
 	// persists and there is no compellable PITR record.
 	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimit"] }],
-	"kv_namespaces": [{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" }],
+	"kv_namespaces": [
+		{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" },
+		// Read cache of the signed Key Directory + Revocation List (notice verify).
+		{ "binding": "KEYDIR_CACHE", "id": "REPLACE_KV_KEYDIR_CACHE_ID" }
+	],
 	// Single migration owner is apps/console (it runs `wrangler d1 migrations
 	// apply`). The api binds the same DB read/write but declares no migrations_dir,
 	// so there are never two writers of the d1_migrations bookkeeping table.
