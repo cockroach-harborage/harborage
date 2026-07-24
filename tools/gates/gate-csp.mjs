@@ -19,6 +19,29 @@ if (existsSync(webDir)) {
 			problems.push('svelte.config.js: kit.csp with mode "nonce" or "auto" is required');
 		if (/unsafe-inline|unsafe-eval/.test(cfg))
 			problems.push('svelte.config.js: unsafe-inline/unsafe-eval must not appear');
+		// The COMPLETE policy must live here, not in _headers: Kit appends the
+		// hashes for its inline hydration bootstrap to script-src, and a second
+		// independently-enforced policy could not carry them. Without an explicit
+		// default-src there is no fallback, so any directive nobody listed is
+		// unrestricted — which is how connect-src went missing on a browser-crypto
+		// PWA, where injected script can exfiltrate plaintext to any origin.
+		for (const directive of [
+			'default-src',
+			'script-src',
+			'style-src',
+			'connect-src',
+			'img-src',
+			'worker-src',
+			'object-src',
+			'base-uri',
+			'form-action',
+			'frame-ancestors',
+			'require-trusted-types-for',
+			'trusted-types'
+		]) {
+			if (!cfg.includes(`'${directive}'`))
+				problems.push(`svelte.config.js: kit.csp.directives is missing ${directive}`);
+		}
 	}
 	const hooks = join(webDir, 'src/hooks.server.ts');
 	if (!existsSync(hooks)) {
@@ -47,7 +70,13 @@ if (existsSync(webDir)) {
 		const text = readFileSync(headers, 'utf8');
 		for (const needle of [
 			"require-trusted-types-for 'script'",
+			// Browsers ignore frame-ancestors in a meta tag, so it only works here.
 			"frame-ancestors 'none'",
+			// An XSS on a browser-crypto PWA exfiltrates over connect-src.
+			"connect-src 'self'",
+			"object-src 'none'",
+			"base-uri 'none'",
+			"form-action 'none'",
 			'X-Content-Type-Options',
 			'Referrer-Policy',
 			'X-Frame-Options'
@@ -56,6 +85,34 @@ if (existsSync(webDir)) {
 		}
 		if (/unsafe-inline|unsafe-eval/.test(text))
 			problems.push('_headers: unsafe-inline/unsafe-eval must not appear');
+		// script-src/style-src here would be a second policy WITHOUT Kit's inline
+		// hashes, and two CSP policies are enforced independently — hydration would
+		// break on every prerendered page. Keep them in svelte.config.js only.
+		if (/^\s*Content-Security-Policy:.*\b(script-src|default-src)\b/m.test(text))
+			problems.push(
+				'_headers: script-src/default-src belong in svelte.config.js (Kit adds hashes)'
+			);
+	}
+}
+
+// The privileged surface must be at least as strict as the public one. It is
+// server-rendered with no client JS, so it needs no inline-hash carve-out.
+const consoleEntry = join(repoRoot, 'apps/console/src/index.ts');
+if (existsSync(consoleEntry)) {
+	const text = readFileSync(consoleEntry, 'utf8');
+	const csp = /Content-Security-Policy['"]\s*,\s*\n?\s*(['"`])([\s\S]*?)\1/.exec(text);
+	if (!csp) {
+		problems.push('apps/console: no Content-Security-Policy found');
+	} else {
+		const policy = csp[2];
+		for (const needle of ["default-src 'none'", "base-uri 'none'", "frame-ancestors 'none'"]) {
+			if (!policy.includes(needle)) problems.push(`apps/console CSP: missing ${needle}`);
+		}
+		if (/unsafe-eval/.test(policy)) problems.push('apps/console CSP: unsafe-eval must not appear');
+		// script-src is absent by design (default-src 'none' covers it, and the
+		// console ships no client JS). If script ever lands, it must be explicit.
+		if (/script-src/.test(policy) && /unsafe-inline/.test(policy))
+			problems.push("apps/console CSP: script-src must not allow 'unsafe-inline'");
 	}
 }
 

@@ -9,6 +9,12 @@
 	margin: 0;
 }
 
+/* SvelteKit's body wrapper. A class, not a style attribute, so the strict
+   `style-src 'self'` in _headers does not have to allow inline styles. */
+.app-root {
+	display: contents;
+}
+
 html {
 	font-family: var(--font);
 	font-size: 100%;
