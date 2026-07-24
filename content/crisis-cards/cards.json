@@ -1,0 +1,152 @@
+{
+	"$schema": "harborage-crisis-cards/v1",
+	"review_state": "draft",
+	"pack_epoch": 0,
+	"note": "DRAFT content. NOT counsel- or medic-signed. The app shows a prominent draft banner and must never present this as authoritative. A counsel/medic-signed pack replaces this before launch; the legal cards (detained, rights) are counsel-gated.",
+	"cards": {
+		"teargas": {
+			"en": {
+				"title": "If there is tear gas",
+				"steps": [
+					"Move to fresh air and higher ground.",
+					"Turn away from the gas.",
+					"Do not rub your eyes.",
+					"Rinse eyes and skin with clean water.",
+					"Breathe slowly. Help others move away."
+				],
+				"donts": ["Do not run blindly into a crowd.", "Do not touch your face with dirty hands."],
+				"closing": "General information. Not medical or legal advice."
+			},
+			"hi": {
+				"title": "अगर आँसू गैस हो",
+				"steps": [
+					"ताज़ी हवा और ऊँची जगह की ओर जाएँ।",
+					"गैस से मुँह मोड़ लें।",
+					"आँखें न मलें।",
+					"आँखें और त्वचा साफ़ पानी से धोएँ।",
+					"धीरे साँस लें। दूसरों को हटने में मदद करें।"
+				],
+				"donts": ["भीड़ में आँख मूँदकर न दौड़ें।", "गंदे हाथों से चेहरा न छुएँ।"],
+				"closing": "सामान्य जानकारी। चिकित्सा या कानूनी सलाह नहीं।"
+			}
+		},
+		"detained": {
+			"en": {
+				"title": "If you are detained",
+				"steps": [
+					"Stay calm. Do not resist.",
+					"Ask why you are being held.",
+					"Say clearly that you want a lawyer.",
+					"Ask to inform one family member or friend.",
+					"Note the time, place, and officers.",
+					"You should be produced before a magistrate within 24 hours."
+				],
+				"donts": [
+					"Do not sign what you cannot read.",
+					"Do not give a statement without a lawyer."
+				],
+				"closing": "Draft. Not legal advice. Based on Article 22 and DK Basu."
+			},
+			"hi": {
+				"title": "अगर आपको हिरासत में लिया जाए",
+				"steps": [
+					"शांत रहें। विरोध न करें।",
+					"पूछें कि आपको क्यों रोका गया है।",
+					"साफ़ कहें कि आपको वकील चाहिए।",
+					"एक परिजन या मित्र को बताने के लिए कहें।",
+					"समय, जगह और अधिकारियों को याद रखें।",
+					"आपको 24 घंटे के भीतर मजिस्ट्रेट के सामने पेश किया जाना चाहिए।"
+				],
+				"donts": [
+					"जो पढ़ न सकें, उस पर हस्ताक्षर न करें।",
+					"वकील के बिना बयान न दें।"
+				],
+				"closing": "मसौदा। कानूनी सलाह नहीं। अनुच्छेद 22 और डीके बसु पर आधारित।"
+			}
+		},
+		"blackout": {
+			"en": {
+				"title": "If the network is down",
+				"steps": [
+					"Stay calm. Save your battery.",
+					"Use cash and paper notes.",
+					"Agree a meeting point with friends.",
+					"Keep offline maps and numbers ready.",
+					"Share news only from people you trust."
+				],
+				"donts": ["Do not spread news you cannot check."],
+				"closing": "General information. Not legal advice."
+			},
+			"hi": {
+				"title": "अगर नेटवर्क बंद हो",
+				"steps": [
+					"शांत रहें। बैटरी बचाएँ।",
+					"नकद और कागज़ के नोट रखें।",
+					"दोस्तों के साथ मिलने की जगह तय करें।",
+					"ऑफ़लाइन नक्शे और नंबर तैयार रखें।",
+					"खबर सिर्फ़ भरोसेमंद लोगों से साझा करें।"
+				],
+				"donts": ["ऐसी खबर न फैलाएँ जिसे आप जाँच न सकें।"],
+				"closing": "सामान्य जानकारी। कानूनी सलाह नहीं।"
+			}
+		},
+		"peaceful": {
+			"en": {
+				"title": "Stay peaceful",
+				"steps": [
+					"Keep your hands visible.",
+					"Stay with the crowd. Do not push.",
+					"Follow the agreed route.",
+					"Help people who are hurt or scared.",
+					"Leave calmly if it turns unsafe."
+				],
+				"donts": [
+					"Do not carry anything that looks like a weapon.",
+					"Do not react to people who provoke you."
+				],
+				"closing": "General information. Not legal advice."
+			},
+			"hi": {
+				"title": "शांत रहें",
+				"steps": [
+					"अपने हाथ दिखते रहने दें।",
+					"भीड़ के साथ रहें। धक्का न दें।",
+					"तय किए रास्ते पर चलें।",
+					"घायल या डरे लोगों की मदद करें।",
+					"असुरक्षित लगे तो शांति से निकल जाएँ।"
+				],
+				"donts": [
+					"हथियार जैसी कोई चीज़ न रखें।",
+					"भड़काने वालों पर प्रतिक्रिया न करें।"
+				],
+				"closing": "सामान्य जानकारी। कानूनी सलाह नहीं।"
+			}
+		},
+		"rights": {
+			"en": {
+				"title": "Know your rights",
+				"steps": [
+					"You have the right to know why you are stopped.",
+					"You have the right to a lawyer.",
+					"You have the right to tell someone where you are.",
+					"Police should produce you before a magistrate within 24 hours.",
+					"Women should be searched only by women officers."
+				],
+				"donts": ["Do not give a statement without a lawyer."],
+				"closing": "Draft. Not legal advice. Under review by a lawyer."
+			},
+			"hi": {
+				"title": "अपने अधिकार जानें",
+				"steps": [
+					"आपको जानने का हक़ है कि आपको क्यों रोका गया।",
+					"आपको वकील का हक़ है।",
+					"आपको किसी को अपनी जगह बताने का हक़ है।",
+					"पुलिस को आपको 24 घंटे में मजिस्ट्रेट के सामने पेश करना चाहिए।",
+					"महिलाओं की तलाशी केवल महिला अधिकारी लें।"
+				],
+				"donts": ["वकील के बिना बयान न दें।"],
+				"closing": "मसौदा। कानूनी सलाह नहीं। वकील की समीक्षा जारी।"
+			}
+		}
+	}
+}
