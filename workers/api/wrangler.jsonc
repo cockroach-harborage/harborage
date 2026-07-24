@@ -29,10 +29,8 @@
 			"migrations_dir": "../../migrations"
 		}
 	],
-	"r2_buckets": [
-		{ "binding": "EVIDENCE_VAULT", "bucket_name": "harborage-evidence-vault" },
-		{ "binding": "PUBLIC_MEDIA", "bucket_name": "harborage-public-media" }
-	],
+	// No R2 bindings: the api never touches R2. The media Worker owns all R2 access
+	// (S3 presign with bucket-scoped creds), so the deploy token needs no R2 scope.
 	"queues": {
 		"producers": [
 			{ "binding": "MODERATION_BULK", "queue": "moderation-bulk" },
