@@ -48,9 +48,15 @@ importers:
       '@harborage/foundry':
         specifier: workspace:*
         version: link:../../packages/foundry
+      '@harborage/outbox':
+        specifier: workspace:*
+        version: link:../../packages/outbox
       '@harborage/worker-lib':
         specifier: workspace:*
         version: link:../../packages/worker-lib
+      idb:
+        specifier: ^8.0.3
+        version: 8.0.3
     devDependencies:
       '@inlang/paraglide-js':
         specifier: ^2.20.0
