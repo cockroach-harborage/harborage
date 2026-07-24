@@ -122,6 +122,9 @@ importers:
 
   packages/outbox:
     dependencies:
+      '@harborage/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       idb:
         specifier: ^8.0.3
         version: 8.0.3
