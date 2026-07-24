@@ -47,6 +47,8 @@ export interface ApiEnv extends FlagBindings {
 	RATE_LIMIT: DurableObjectNamespace;
 	MODERATION_BULK: Queue;
 	LIFE_SAFETY: Queue;
+	/** Read cache of the signed Key Directory + Revocation List (notice verify). */
+	KEYDIR_CACHE: KVNamespace;
 	/** Turnstile secret (wrangler secret, set at intake switch-on). Empty ⇒ verify fails closed. */
 	TURNSTILE_SECRET?: string;
 }
