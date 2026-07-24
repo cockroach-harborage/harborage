@@ -130,6 +130,31 @@ app.get('/api/incidents/index', async (c) => {
 	}
 });
 
+// GET /api/notices — published official notices (public-plaintext). Behind
+// notices_publish (fail closed to empty). The client verifies each notice's
+// m-of-n signature against the on-device signed key directory; the server is
+// content-blind about trust. Degrade-safe to an empty list on error.
+app.get('/api/notices', async (c) => {
+	if (!(await flagEnabled(c.env.FLAGS, 'notices_publish')))
+		return c.json({ published: false, notices: [] }, 200, {
+			'cache-control': 'public, max-age=60'
+		});
+	try {
+		const { results } = await c.env.DB.prepare(
+			`SELECT id, epoch, notice_type, title_i18n, body_i18n, area, payload_hash,
+			        signature_set, signer_key_ids, published_at, supersedes, superseded_by
+			 FROM notices ORDER BY published_at DESC LIMIT 200`
+		).all();
+		return c.json({ published: true, notices: results }, 200, {
+			'cache-control': 'public, max-age=120'
+		});
+	} catch {
+		return c.json({ published: true, notices: [], stale: true }, 200, {
+			'cache-control': 'public, max-age=30'
+		});
+	}
+});
+
 // GET /api/directory/pack — public directory rows. Reads are day-1 core and stay
 // open (writes are gated); degrade-safe to an empty pack on error.
 app.get('/api/directory/pack', async (c) => {
