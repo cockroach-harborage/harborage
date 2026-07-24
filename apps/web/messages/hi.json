@@ -112,5 +112,19 @@
 	"footer_limits": "यह ऐप किससे नहीं बचा सकता",
 	"footer_source": "सोर्स कोड",
 	"error_title": "पन्ना नहीं मिला",
-	"error_body": "पता जाँचें, या होम पर लौटें।"
+	"error_body": "पता जाँचें, या होम पर लौटें।",
+	"inc_type_baton_charge": "लाठीचार्ज / पिटाई",
+	"inc_type_crowd_weapons": "आँसू गैस / भीड़-नियंत्रण हथियार",
+	"inc_type_firing": "गोलीबारी",
+	"inc_type_assault": "हमला / शारीरिक हिंसा",
+	"inc_type_sexual_violence": "यौन हिंसा",
+	"inc_type_detention": "हिरासत / गिरफ़्तारी",
+	"inc_type_custody_abuse": "हिरासत में दुर्व्यवहार या यातना",
+	"inc_type_death": "हिरासत या प्रदर्शन में मौत",
+	"inc_type_denied_care": "चिकित्सा या कानूनी मदद से इनकार",
+	"inc_type_incommunicado": "संपर्क से दूर / लापता",
+	"inc_type_surveillance": "निगरानी",
+	"inc_type_network_shutdown": "नेटवर्क या संचार बंद",
+	"inc_type_property_damage": "संपत्ति को नुकसान / तोड़फोड़",
+	"inc_type_intimidation": "धमकी या डराना"
 }

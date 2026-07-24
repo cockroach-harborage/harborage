@@ -137,7 +137,7 @@ Three hard trust zones, one Cloudflare account, purpose-scoped Workers, a low-en
 
 ### 4.2 Core D1 tables (high level; every filter column indexed — rows-read = rows-scanned)
 
-- `incidents` — type, date, time-window, **coarse geohash-prefix + jurisdiction_bucket** (no lat/lng column), actor by role/unit/official-id, injuries/detentions, constrained narrative, verification_state, corroboration_count. *No* name/phone/precise-GPS/uploader→incident columns.
+- `incidents` — type (frozen closed taxonomy, PRD §2), date, time-window, **coarse geohash-prefix (`coarse_geohash4`, ~20 km) + `jurisdiction_bucket`** (no lat/lng column), actor by role/unit (institutional only — no badge/name/plate), injuries/detentions, constrained narrative, verification_state (default `Unverified`), corroboration_count, status. *No* name/phone/precise-GPS/uploader→incident columns. Migration `migrations/0002_incidents.sql`.
 - `accountability_records` — badge/rank/unit/station, name_if_officially_established, documentary_anchor_hash, public_case_number, verification_state, inline m-of-n publication signatures. *No* home/family/private-life columns.
 - `legal_matter_refs` — `{opaque_ref, jurisdiction_bucket, next_deadline_ts, public_case_number?, status}`. *No* party-name column.
 - `notices` + `notice_chain` — signed notices + append-only hash chain.
