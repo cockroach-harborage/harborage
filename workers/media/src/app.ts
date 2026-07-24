@@ -1,6 +1,6 @@
 /**
  * workers/media routes (ARCHITECTURE §3.1, §7.6). Presigns direct-to-R2 uploads
- * so bytes never proxy the Worker. All endpoints are behind record_intake
+ * so bytes never proxy the Worker. All endpoints are behind document_intake
  * (fail-closed OFF) and require presign credentials (set only at switch-on), so
  * this is dormant at M1. Kept separate from index.ts to stay Node-testable.
  *
@@ -59,7 +59,7 @@ async function rateOk(c: {
 /** Both gates: the feature flag (fail-closed OFF) and presence of presign creds. */
 async function ready(c: { env: MediaEnv }): Promise<boolean> {
 	if (
-		!(await featureAvailable(c.env.FLAGS, 'record_intake', { disabledUnderHeightenedThreat: true }))
+		!(await featureAvailable(c.env.FLAGS, 'document_intake', { disabledUnderHeightenedThreat: true }))
 	)
 		return false;
 	return Boolean(

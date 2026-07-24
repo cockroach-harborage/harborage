@@ -1,10 +1,10 @@
 /**
  * Off-device send (ARCHITECTURE §7.6, §19). Wires the record's sealed original +
  * redacted derivative to the api (register) and media (presign) Workers through
- * the packages/outbox orchestrator. Gated by record_intake: the client reads
+ * the packages/outbox orchestrator. Gated by document_intake: the client reads
  * /api/intake/status to show/hide the affordance, and the Workers are the real
  * fail-closed gate. Bytes go direct to R2 via presigned URLs — never through a
- * Worker. Nothing here runs while record_intake is OFF (all of M1).
+ * Worker. Nothing here runs while document_intake is OFF (all of M1).
  *
  * M2 note: the metadata envelope key scheme (how the moderation pipeline reads
  * the sealed register body) is finalized with the identity core; here the body
@@ -24,10 +24,10 @@ import {
 	type PartTransport,
 	type PresignClient
 } from '@harborage/outbox';
-import type { LocalRecord } from '$lib/records';
+import type { LocalDocument } from '$lib/documents';
 
 export interface IntakeStatus {
-	record_intake: boolean;
+	document_intake: boolean;
 	directory_intake: boolean;
 }
 
@@ -35,14 +35,14 @@ export interface IntakeStatus {
 export async function getIntakeStatus(fetchFn: typeof fetch = fetch): Promise<IntakeStatus> {
 	try {
 		const res = await fetchFn('/api/intake/status');
-		if (!res.ok) return { record_intake: false, directory_intake: false };
+		if (!res.ok) return { document_intake: false, directory_intake: false };
 		const data = (await res.json()) as Partial<IntakeStatus>;
 		return {
-			record_intake: data.record_intake === true,
+			document_intake: data.document_intake === true,
 			directory_intake: data.directory_intake === true
 		};
 	} catch {
-		return { record_intake: false, directory_intake: false };
+		return { document_intake: false, directory_intake: false };
 	}
 }
 
@@ -102,7 +102,7 @@ class R2PartTransport implements PartTransport {
 	}
 }
 
-function metadataEnvelope(record: LocalRecord): Uint8Array {
+function metadataEnvelope(record: LocalDocument): Uint8Array {
 	const meta = {
 		type: record.type,
 		note: record.note,
@@ -122,10 +122,10 @@ export type SendOutcome = 'sent' | 'not_open' | 'failed';
 /**
  * Send a keep-on-phone record off device: register the sealed metadata, then
  * (for media records) upload the redacted derivative and the sealed original.
- * Returns 'not_open' when record_intake is OFF (the Worker returns 403).
+ * Returns 'not_open' when document_intake is OFF (the Worker returns 403).
  */
 export async function sendRecord(
-	record: LocalRecord,
+	record: LocalDocument,
 	store: OutboxStore,
 	fetchFn: typeof fetch = fetch
 ): Promise<SendOutcome> {

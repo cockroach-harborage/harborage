@@ -20,7 +20,7 @@ export type FlagName =
 	| 'heightened_threat'
 	| 'notices_publish'
 	| 'directory_intake'
-	| 'record_intake'
+	| 'document_intake'
 	| 'incidents_publish'
 	| 'ai_moderation'
 	| 'archive_anchoring';

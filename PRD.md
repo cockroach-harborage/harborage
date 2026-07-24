@@ -752,7 +752,7 @@ Five is the ceiling. Tapping a tab always opens that section's top screen. The a
 
 **Settings** (language, text size, identity backup, safe mode, offline, "how checking works") lives behind a small gear at the top-right of Home. It is not a tab and it holds nothing a user needs mid-crisis. Everything a person needs fast is in the five tabs, never settings-only.
 
-**Get help and Give help do not get their own tabs.** They, with Document an incident, are the whole top of Home. As tabs Get help / Give help would shrink to icons; on Home they can be large, labelled, and colour-coded. (Document an incident leads into the existing Record tab.) Home is one tap away from anywhere, so the top actions are always two taps out at most.
+**Get help and Give help do not get their own tabs.** They, with Document an incident, are the whole top of Home. As tabs Get help / Give help would shrink to icons; on Home they can be large, labelled, and colour-coded. (Document an incident leads into the Document tab.) Home is one tap away from anywhere, so the top actions are always two taps out at most.
 
 **Back behaviour.** On-screen back (top-left) and hardware back do the same thing. Within a section, back steps up the tree. At a section top, back returns to Home. Quick-exit overrides everything and drops to the neutral Directory view.
 
@@ -827,7 +827,7 @@ Top to bottom, one column, no horizontal scroll:
 
 1. **A quiet header.** App name small on the left. On the right: language toggle (अ/A), a gear (settings), and a plain **Close** control (quick-exit).
 2. **Get help.** Filled with the accent colour, on top, largest text in the app. Big open-hand icon. Subtitle: "Medical, legal, food, safety." This is the button a distress user's eye lands on without reading.
-3. **Document an incident.** Outlined, below Get help, calm. Camera icon. Subtitle: "Photos, notes, audio. Stays on your phone." Neutral document-it-yourself wording, never "report" (which reads as filing with police, more so in Hindi). Leads into the Record tab.
+3. **Document an incident.** Outlined, below Get help, calm. Camera icon. Subtitle: "Photos, notes, audio. Stays on your phone." Neutral document-it-yourself wording, never "report" (which reads as filing with police, more so in Hindi). Leads into the Document tab. **(2026-07-25: the tab was renamed from "Record" to "Document" for the complementary reason — people also share things they came across from friends or social media, which they did not record. "Document" satisfies both constraints and is the wording this section already prefers; "दस्तावेज़" carries no FIR association.)**
 4. **Give help.** Outlined, below, clearly secondary. Same width, calm. Subtitle: "Offer what you can."
 5. **Three big cards, stacked:** Stay safe · Nearby · Directory.
 6. **One thin line:** current city, and "Offline. Showing saved information." only when offline. Tapping the city opens the picker.

@@ -5,11 +5,11 @@
 	import RedactionCanvas from '$lib/components/RedactionCanvas.svelte';
 	import { INCIDENT_TYPES, incidentTypeLabel, type IncidentType } from '$lib/incident-types';
 	import { processImage, sealMedia, type Box } from '$lib/pipeline/pipeline-client';
-	import { records, newId, type Derivative, type SealedOriginal, type RecordKind } from '$lib/records';
+	import { documents, newId, type Derivative, type SealedOriginal, type DocumentKind } from '$lib/documents';
 
 	type Step = 'choose' | 'photo' | 'audio' | 'import' | 'describe' | 'saved';
 	let step = $state<Step>('choose');
-	let kind = $state<RecordKind>('note');
+	let kind = $state<DocumentKind>('note');
 	let busy = $state(false);
 	let error = $state('');
 
@@ -123,7 +123,7 @@
 		busy = true;
 		error = '';
 		try {
-			await records.put({
+			await documents.put({
 				id: newId(),
 				kind,
 				type: chosenType || undefined,
@@ -144,7 +144,7 @@
 		}
 	}
 
-	function choose(k: RecordKind, next: Step) {
+	function choose(k: DocumentKind, next: Step) {
 		reset();
 		kind = k;
 		step = next;
@@ -152,11 +152,11 @@
 </script>
 
 <svelte:head>
-	<title>{m.record_new()} · {m.app_name()}</title>
+	<title>{m.document_new()} · {m.app_name()}</title>
 </svelte:head>
 
-<h1>{m.record_new()}</h1>
-<p class="safety-copy">{m.record_stays()}</p>
+<h1>{m.document_new()}</h1>
+<p class="safety-copy">{m.document_stays()}</p>
 
 {#if error}
 	<p class="err" role="alert">{error}</p>
@@ -166,32 +166,32 @@
 	<div class="list">
 		<button type="button" class="list-row" onclick={() => choose('photo', 'photo')}>
 			<Icon name="camera" />
-			<span class="row-label">{m.record_choose_photo()}</span>
+			<span class="row-label">{m.document_choose_photo()}</span>
 			<span class="chev"><Icon name="chevron" size={18} /></span>
 		</button>
 		<button type="button" class="list-row" onclick={() => choose('note', 'describe')}>
 			<Icon name="book" />
-			<span class="row-label">{m.record_choose_note()}</span>
+			<span class="row-label">{m.document_choose_note()}</span>
 			<span class="chev"><Icon name="chevron" size={18} /></span>
 		</button>
 		<button type="button" class="list-row" onclick={() => choose('audio', 'audio')}>
 			<Icon name="phone" />
-			<span class="row-label">{m.record_choose_audio()}</span>
+			<span class="row-label">{m.document_choose_audio()}</span>
 			<span class="chev"><Icon name="chevron" size={18} /></span>
 		</button>
 		<button type="button" class="list-row" onclick={() => choose('note', 'import')}>
 			<Icon name="globe" />
-			<span class="row-label">{m.record_choose_import()}</span>
+			<span class="row-label">{m.document_choose_import()}</span>
 			<span class="chev"><Icon name="chevron" size={18} /></span>
 		</button>
 	</div>
-	<p class="muted">{m.record_video_note()}</p>
+	<p class="muted">{m.document_video_note()}</p>
 {:else if step === 'photo'}
 	<h2>{m.redact_title()}</h2>
 	{#if !imageBlob}
-		<p class="safety-copy">{m.record_pick_photo_intro()}</p>
+		<p class="safety-copy">{m.document_pick_photo_intro()}</p>
 		<label class="hero hero-secondary picker">
-			<span class="hero-title"><Icon name="camera" size={28} />{m.record_pick_photo()}</span>
+			<span class="hero-title"><Icon name="camera" size={28} />{m.document_pick_photo()}</span>
 			<input type="file" accept="image/*" capture="environment" onchange={onPickPhoto} />
 		</label>
 	{:else}
@@ -209,7 +209,7 @@
 		</div>
 	{/if}
 {:else if step === 'audio'}
-	<h2>{m.record_choose_audio()}</h2>
+	<h2>{m.document_choose_audio()}</h2>
 	<p class="safety-copy">{m.audio_no_voice()}</p>
 	<div class="stack">
 		{#if !recording && !audioBlob}
@@ -265,7 +265,7 @@
 	<h2>{m.saved_title()}</h2>
 	<p class="safety-copy">{m.saved_body()}</p>
 	<div class="stack">
-		<a class="btn-primary" href={localizeHref('/record')}>{m.saved_view()}</a>
+		<a class="btn-primary" href={localizeHref('/document')}>{m.saved_view()}</a>
 		<button
 			type="button"
 			class="btn-outline"

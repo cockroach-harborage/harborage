@@ -44,7 +44,7 @@
 	<span class="hero-sub">{m.hero_get_help_sub()}</span>
 </a>
 
-<a class="hero hero-secondary" href={localizeHref('/record')}>
+<a class="hero hero-secondary" href={localizeHref('/document')}>
 	<span class="hero-title"><Icon name="camera" size={32} />{m.hero_document()}</span>
 	<span class="hero-sub">{m.hero_document_sub()}</span>
 </a>

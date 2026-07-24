@@ -11,19 +11,19 @@ const PNG_2x2 = Buffer.from(
 );
 
 test('a note record is kept on this phone only', async ({ page }) => {
-	await page.goto('/record/new');
+	await page.goto('/document/new');
 	await page.getByRole('button', { name: 'Write a note' }).click();
 	await page.getByRole('button', { name: 'Detention / arrest' }).click();
 	await page.getByRole('button', { name: 'Keep on phone' }).click();
 	await expect(page.getByRole('heading', { name: 'Saved on this phone' })).toBeVisible();
-	await page.goto('/record');
+	await page.goto('/document');
 	await expect(page.getByText('Detention / arrest')).toBeVisible();
-	// record_intake is OFF, so the off-device send affordance must stay hidden.
+	// document_intake is OFF, so the off-device send affordance must stay hidden.
 	await expect(page.getByRole('button', { name: 'Send to archive' })).toHaveCount(0);
 });
 
 test('a photo is sealed on-device with no public copy (keep private only)', async ({ page }) => {
-	await page.goto('/record/new');
+	await page.goto('/document/new');
 	await page.getByRole('button', { name: 'Add a photo' }).click();
 	await page.setInputFiles('input[type="file"]', {
 		name: 'x.png',
@@ -35,13 +35,13 @@ test('a photo is sealed on-device with no public copy (keep private only)', asyn
 	await page.getByRole('button', { name: 'Baton charge / beating' }).click();
 	await page.getByRole('button', { name: 'Keep on phone' }).click();
 	await expect(page.getByRole('heading', { name: 'Saved on this phone' })).toBeVisible();
-	await page.goto('/record');
+	await page.goto('/document');
 	await expect(page.getByText('Baton charge / beating')).toBeVisible();
 	await expect(page.getByText('Private only')).toBeVisible();
 });
 
 test('a photo redaction bakes a downscaled public copy (hide and continue)', async ({ page }) => {
-	await page.goto('/record/new');
+	await page.goto('/document/new');
 	await page.getByRole('button', { name: 'Add a photo' }).click();
 	await page.setInputFiles('input[type="file"]', {
 		name: 'x.png',
@@ -54,7 +54,7 @@ test('a photo redaction bakes a downscaled public copy (hide and continue)', asy
 	await page.getByRole('button', { name: 'Tear gas / crowd-control weapons' }).click();
 	await page.getByRole('button', { name: 'Keep on phone' }).click();
 	await expect(page.getByRole('heading', { name: 'Saved on this phone' })).toBeVisible();
-	await page.goto('/record');
+	await page.goto('/document');
 	await expect(page.getByText('Tear gas / crowd-control weapons')).toBeVisible();
 	// A redacted record shows its covered thumbnail, not the "Private only" note.
 	await expect(page.locator('img.rec-thumb')).toBeVisible();

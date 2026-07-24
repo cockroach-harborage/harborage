@@ -74,7 +74,10 @@ M1 code ships behind fail-closed flags (all OFF). The D1 migrations
 `api`/`media` Workers deploy automatically; **switching a feature on** needs these
 manual steps first (each is a readiness gate, not a code change):
 
-- **`record_intake` (off-device evidence send).** (a) Mint a **bucket-scoped R2 S3
+- **`document_intake` (off-device evidence send).** *(Renamed from `record_intake`.
+  The KV key is `flag:document_intake`; the old `flag:record_intake` key, if it was
+  ever written, is now dead. Flipping it does nothing — reads of the new name
+  return absent, which fails closed to OFF, the safe direction.)* (a) Mint a **bucket-scoped R2 S3
   API token** (Cloudflare API can't self-bootstrap it) and set `R2_ACCOUNT_ID`,
   `R2_PRESIGN_ACCESS_KEY_ID`, `R2_PRESIGN_SECRET_ACCESS_KEY` as `harborage-media`
   secrets (`wrangler secret put`). (b) Create the **Turnstile widget** and set
