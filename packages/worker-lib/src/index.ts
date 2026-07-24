@@ -3,3 +3,4 @@ export * from './safe-log.ts';
 export * from './flags.ts';
 export * from './access.ts';
 export * from './envelope.ts';
+export * from './turnstile.ts';

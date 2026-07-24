@@ -21,12 +21,14 @@
 	// persists and there is no compellable PITR record.
 	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimit"] }],
 	"kv_namespaces": [{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" }],
+	// Single migration owner is apps/console (it runs `wrangler d1 migrations
+	// apply`). The api binds the same DB read/write but declares no migrations_dir,
+	// so there are never two writers of the d1_migrations bookkeeping table.
 	"d1_databases": [
 		{
 			"binding": "DB",
 			"database_name": "harborage",
-			"database_id": "REPLACE_D1_ID",
-			"migrations_dir": "../../migrations"
+			"database_id": "REPLACE_D1_ID"
 		}
 	],
 	// No R2 bindings: the api never touches R2. The media Worker owns all R2 access

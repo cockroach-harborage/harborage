@@ -9,7 +9,8 @@
     "./safe-log": "./src/safe-log.ts",
     "./flags": "./src/flags.ts",
     "./access": "./src/access.ts",
-    "./envelope": "./src/envelope.ts"
+    "./envelope": "./src/envelope.ts",
+    "./turnstile": "./src/turnstile.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

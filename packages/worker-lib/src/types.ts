@@ -53,10 +53,20 @@ export interface ApiEnv extends FlagBindings {
 
 /** workers/media — M1 */
 export interface MediaEnv extends FlagBindings {
-	/** S3-API credentials for presigning only (bucket-scoped, short-TTL URLs). */
-	R2_PRESIGN_ACCESS_KEY_ID: string;
-	R2_PRESIGN_SECRET_ACCESS_KEY: string;
-	R2_ACCOUNT_ID: string;
+	/**
+	 * S3-API credentials for presigning only (bucket-scoped, short-TTL URLs).
+	 * Unset until intake switch-on (RUNBOOK), so typed optional — `ready()` refuses
+	 * every request while any of the three is absent.
+	 */
+	R2_PRESIGN_ACCESS_KEY_ID?: string;
+	R2_PRESIGN_SECRET_ACCESS_KEY?: string;
+	R2_ACCOUNT_ID?: string;
+	/**
+	 * The api Worker's memory-only RateLimit DO, bound cross-script (script_name:
+	 * "harborage-api"). One shared token-bucket namespace so an unauthenticated
+	 * presign flood is bounded even before cap-cert + PoP land (M2).
+	 */
+	RATE_LIMIT: DurableObjectNamespace;
 }
 
 /** workers/consumer — M2 */

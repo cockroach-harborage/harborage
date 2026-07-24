@@ -8,9 +8,9 @@
 import { Hono } from 'hono';
 import { isSealedEnvelope, MAX_ENVELOPE_LEN } from '@harborage/worker-lib/envelope';
 import { featureAvailable, flagEnabled } from '@harborage/worker-lib/flags';
-import { safeLog, statusClass } from '@harborage/worker-lib/safe-log';
+import { coarseMs, safeLog, statusClass } from '@harborage/worker-lib/safe-log';
+import { verifyTurnstile } from '@harborage/worker-lib/turnstile';
 import type { ApiEnv } from '@harborage/worker-lib/types';
-import { verifyTurnstile } from './turnstile.ts';
 
 interface RateLimitStub {
 	allow(cost?: number): Promise<boolean>;
@@ -26,11 +26,14 @@ app.use('*', async (c, next) => {
 	await next();
 	c.header('X-Content-Type-Options', 'nosniff');
 	c.header('Referrer-Policy', 'no-referrer');
-	c.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+	c.header(
+		'Content-Security-Policy',
+		"default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+	);
 	safeLog('api_request', {
 		route: c.req.routePath,
 		statusClass: statusClass(c.res.status),
-		ms: Date.now() - started
+		ms: coarseMs(Date.now() - started)
 	});
 });
 
@@ -63,7 +66,9 @@ app.post('/api/incidents/register', async (c) => {
 
 	// 2. Rate limit, then the fail-closed feature flag, then Turnstile.
 	if (!(await rateOk(c))) return c.text('slow down', 429);
-	if (!(await featureAvailable(c.env.FLAGS, 'record_intake', { disabledUnderHeightenedThreat: true })))
+	if (
+		!(await featureAvailable(c.env.FLAGS, 'record_intake', { disabledUnderHeightenedThreat: true }))
+	)
 		return c.text('not open', 403);
 	if (!(await verifyTurnstile(c.req.header('cf-turnstile-response'), c.env.TURNSTILE_SECRET)))
 		return c.text('verification failed', 403);
@@ -85,7 +90,11 @@ app.post('/api/directory/report', async (c) => {
 	if (!body || typeof body.entity_id !== 'string' || typeof body.reason_code !== 'string')
 		return c.text('bad request', 400);
 	if (!(await rateOk(c))) return c.text('slow down', 429);
-	if (!(await featureAvailable(c.env.FLAGS, 'directory_intake', { disabledUnderHeightenedThreat: true })))
+	if (
+		!(await featureAvailable(c.env.FLAGS, 'directory_intake', {
+			disabledUnderHeightenedThreat: true
+		}))
+	)
 		return c.text('not open', 403);
 	if (!(await verifyTurnstile(c.req.header('cf-turnstile-response'), c.env.TURNSTILE_SECRET)))
 		return c.text('verification failed', 403);
@@ -104,9 +113,21 @@ app.post('/api/directory/report', async (c) => {
 // and filters/searches locally, so there is no per-query server request.
 app.get('/api/incidents/index', async (c) => {
 	if (!(await flagEnabled(c.env.FLAGS, 'incidents_publish')))
-		return c.json({ published: false, incidents: [] }, 200, { 'cache-control': 'public, max-age=60' });
-	const { results } = await c.env.DB.prepare('SELECT * FROM incident_public_index').all();
-	return c.json({ published: true, incidents: results }, 200, { 'cache-control': 'public, max-age=300' });
+		return c.json({ published: false, incidents: [] }, 200, {
+			'cache-control': 'public, max-age=60'
+		});
+	// Safety-critical reads fail to stale, never dark (ARCHITECTURE §6.5): a
+	// materializer/DB blip must not blank the public record with a 500.
+	try {
+		const { results } = await c.env.DB.prepare('SELECT * FROM incident_public_index').all();
+		return c.json({ published: true, incidents: results }, 200, {
+			'cache-control': 'public, max-age=300'
+		});
+	} catch {
+		return c.json({ published: true, incidents: [], stale: true }, 200, {
+			'cache-control': 'public, max-age=30'
+		});
+	}
 });
 
 // GET /api/directory/pack — public directory rows. Reads are day-1 core and stay
@@ -130,11 +151,9 @@ app.get('/api/intake/status', async (c) => {
 		featureAvailable(c.env.FLAGS, 'record_intake', { disabledUnderHeightenedThreat: true }),
 		featureAvailable(c.env.FLAGS, 'directory_intake', { disabledUnderHeightenedThreat: true })
 	]);
-	return c.json(
-		{ record_intake: recordIntake, directory_intake: directoryIntake },
-		200,
-		{ 'cache-control': 'public, max-age=30' }
-	);
+	return c.json({ record_intake: recordIntake, directory_intake: directoryIntake }, 200, {
+		'cache-control': 'public, max-age=30'
+	});
 });
 
 app.notFound((c) => c.text('not found', 404));
@@ -151,7 +170,7 @@ export async function materialize(env: ApiEnv): Promise<void> {
        SELECT id, type, occurred_date, region_bucket, coarse_geohash4, actor_role, actor_unit,
           injuries, detentions, narrative, verification_state, corroboration_count, ?
        FROM incidents
-       WHERE status = 'PUBLIC' AND verification_state IN ('Verified', 'Community-Corroborated')`
+       WHERE status = 'PUBLIC' AND verification_state IN ('Human-Verified', 'Community-Corroborated')`
 		).bind(builtBucket)
 	]);
 }
