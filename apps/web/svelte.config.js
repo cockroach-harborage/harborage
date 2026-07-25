@@ -36,7 +36,11 @@ const config = {
 				'style-src': ['self'],
 				'img-src': ['self', 'blob:', 'data:'],
 				'font-src': ['self'],
-				'connect-src': ['self', 'https://*.r2.cloudflarestorage.com', 'https://challenges.cloudflare.com'],
+				'connect-src': [
+					'self',
+					'https://*.r2.cloudflarestorage.com',
+					'https://challenges.cloudflare.com'
+				],
 				'worker-src': ['self'],
 				'manifest-src': ['self'],
 				'media-src': ['self', 'blob:'],
@@ -69,14 +73,7 @@ const config = {
 			// /archive/verify is deliberately unlinked from the tab bar: it is for
 			// someone checking a record they were handed, not a browse destination.
 			// The crawler cannot find it, so it is named here or it never renders.
-			entries: [
-				'/',
-				'/hi',
-				'/limits',
-				'/hi/limits',
-				'/archive/verify',
-				'/hi/archive/verify'
-			]
+			entries: ['/', '/hi', '/limits', '/hi/limits', '/archive/verify', '/hi/archive/verify']
 		}
 	}
 };

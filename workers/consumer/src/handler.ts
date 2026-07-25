@@ -219,10 +219,7 @@ export async function handleRegister(
  * then stored verbatim. If this function could open a keyring, the SEALED-E2E
  * claim on POST /api/evidence/keyring would be false.
  */
-export async function handleKeyring(
-	body: RegisterBody,
-	deps: HandlerDeps
-): Promise<Outcome> {
+export async function handleKeyring(body: RegisterBody, deps: HandlerDeps): Promise<Outcome> {
 	const framed = asBytes(body.envelope);
 	if (!framed) return { disposition: 'retry', reason: 'keyring_missing' };
 

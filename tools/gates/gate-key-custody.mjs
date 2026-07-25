@@ -22,12 +22,7 @@
 // typecheck` was not. Check exit codes, never one command's output.)
 import { join, relative } from 'node:path';
 import { existsSync } from 'node:fs';
-import { repoRoot, read, fail } from './lib.mjs';
-
-/** Strip comments so a doc comment naming a constant cannot satisfy a check. */
-function code(text) {
-	return text.replaceAll(/\/\*[\s\S]*?\*\//g, '').replaceAll(/(^|[^:])\/\/.*$/gm, '$1');
-}
+import { repoRoot, read, fail, stripComments } from './lib.mjs';
 
 const files = {
 	compartments: 'packages/crypto/src/compartments.ts',
@@ -44,7 +39,7 @@ for (const [key, rel] of Object.entries(files)) {
 		problems.push(`${rel} — missing; the key-custody invariant cannot be checked without it`);
 		continue;
 	}
-	src[key] = code(read(abs));
+	src[key] = stripComments(read(abs));
 }
 
 /** Pull a `readonly Compartment[]` literal out of compartments.ts. */

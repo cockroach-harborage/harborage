@@ -16,11 +16,11 @@
 		<span class="row-label">{m.gv_food()}</span>
 		<span class="card-sub">{m.not_open_yet()}</span>
 	</div>
-	<div class="list-row" aria-disabled="true">
+	<a class="list-row" href={localizeHref('/give-help/offer')}>
 		<Icon name="help" />
 		<span class="row-label">{m.gv_skill()}</span>
-		<span class="card-sub">{m.not_open_yet()}</span>
-	</div>
+		<span class="chev"><Icon name="chevron" size={18} /></span>
+	</a>
 	<a class="list-row" href={localizeHref('/directory')}>
 		<Icon name="book" />
 		<span class="row-label">{m.gv_resource()}</span>

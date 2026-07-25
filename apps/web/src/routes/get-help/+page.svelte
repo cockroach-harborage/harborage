@@ -11,12 +11,12 @@
 <h1>{m.get_help_title()}</h1>
 
 <div class="list">
-	<a class="list-row" href={localizeHref('/directory')}>
+	<a class="list-row" href={localizeHref('/get-help/medical')}>
 		<Icon name="help" />
 		<span class="row-label">{m.gh_doctor()}</span>
 		<span class="chev"><Icon name="chevron" size={18} /></span>
 	</a>
-	<a class="list-row" href={localizeHref('/directory')}>
+	<a class="list-row" href={localizeHref('/get-help/aid')}>
 		<Icon name="offer" />
 		<span class="row-label">{m.gh_food()}</span>
 		<span class="chev"><Icon name="chevron" size={18} /></span>
