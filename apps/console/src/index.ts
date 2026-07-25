@@ -12,6 +12,13 @@ import { FLIPPABLE, LOCKED } from './flag-policy.ts';
 import type { AuditRow, FlagRow } from './do/FlagState.ts';
 import type { FlagRecord } from '@harborage/worker-lib/flags';
 import { publishNotice, listNotices, chainStatus } from './notices.ts';
+import {
+	applyReview,
+	isReviewerAction,
+	listQueue,
+	requiresTwoPerson,
+	type QueueItem
+} from './review.ts';
 
 export { FlagState } from './do/FlagState.ts';
 export { NoticeLog } from './do/NoticeLog.ts';
@@ -49,7 +56,8 @@ function flagStub(env: ConsoleEnv): FlagStateStub {
 	return ns.get(ns.idFromName('global')) as unknown as FlagStateStub;
 }
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+/** Numeric character references for & < > " ' — every interpolation goes through this. */
+export const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 app.get('/', async (c) => {
 	const stub = flagStub(c.env);
@@ -113,6 +121,100 @@ app.post('/flags/:name', async (c) => {
 	});
 	if (!result) return c.text('refused: locked or unknown flag', 403);
 	return c.redirect('/', 303);
+});
+
+// --- Review queue (Layer B, §15) ---------------------------------------------
+// Server-rendered, no client JS, plain forms. Verify needs two distinct Access
+// subjects; release and dispute are single-reviewer. The asymmetry is
+// deliberate: removal is reversible and fails safe, publication is not.
+function reviewPage(items: QueueItem[], message?: string): string {
+	const rows = items
+		.map(
+			(i) => `<tr>
+	<td><code>${esc(i.item_id.slice(0, 12))}</code></td>
+	<td>${esc(i.state)}</td>
+	<td>${i.corroboration_count}</td>
+	<td>${i.dispute_count}</td>
+	<td>${i.is_directive ? 'directive' : ''}</td>
+	<td>
+		<form method="post" action="/review/${esc(i.item_id)}">
+			<input type="hidden" name="action" value="release">
+			<input name="reason" placeholder="reason" required maxlength="200">
+			<button type="submit">Release</button>
+		</form>
+		<form method="post" action="/review/${esc(i.item_id)}">
+			<input type="hidden" name="action" value="verify">
+			<input name="reason" placeholder="reason" required maxlength="200">
+			<button type="submit">Mark verified</button>
+		</form>
+	</td>
+</tr>`
+		)
+		.join('');
+
+	return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Review queue</title>
+<style>body{font-family:system-ui;max-width:64rem;margin:2rem auto;padding:0 1rem}table{border-collapse:collapse;width:100%;margin-bottom:2rem}td,th{border:1px solid #ccc;padding:.4rem;text-align:left}form{display:inline}</style>
+</head><body>
+<h1>Review queue</h1>
+${message ? `<p><strong>${esc(message)}</strong></p>` : ''}
+<p>Marking something verified needs two different reviewers. One records the
+intent, a second applies it. With one account this cannot complete, which is
+the intended behaviour: publishing fails toward not publishing.</p>
+<p>Releasing from quarantine needs one reviewer. Removal is reversible;
+publication is not.</p>
+<table>
+<tr><th>Item</th><th>State</th><th>Corroborations</th><th>Disputes</th><th>Class</th><th>Actions</th></tr>
+${rows || '<tr><td colspan="6">Nothing waiting.</td></tr>'}
+</table>
+<p><a href="/">Kill switches</a> · <a href="/notices">Notices</a></p>
+</body></html>`;
+}
+
+app.get('/review', async (c) => {
+	let items: QueueItem[] = [];
+	try {
+		items = await listQueue(c.env.DB);
+	} catch {
+		// The queue is a working surface, not a safety read: an empty view with
+		// no rows is honest when the table is not there yet.
+		items = [];
+	}
+	return c.html(reviewPage(items));
+});
+
+app.post('/review/:id', async (c) => {
+	const origin = c.req.header('Origin');
+	if (origin && new URL(origin).host !== new URL(c.req.url).host) return c.text('denied', 403);
+
+	const form = await c.req.parseBody();
+	const action = typeof form['action'] === 'string' ? form['action'] : '';
+	const reason = typeof form['reason'] === 'string' ? form['reason'].slice(0, 200) : '';
+	if (!isReviewerAction(action)) return c.text('unknown action', 400);
+
+	const identity = c.get('identity');
+	const outcome = await applyReview(c.env.DB, c.req.param('id'), action, identity.sub, reason);
+	safeLog('review_action', {
+		outcome: outcome.kind,
+		statusClass: statusClass(outcome.kind === 'refused' ? 403 : 303)
+	});
+
+	const message =
+		outcome.kind === 'applied'
+			? `Set to ${outcome.state}.`
+			: outcome.kind === 'awaiting-second'
+				? requiresTwoPerson(action)
+					? 'Recorded. A second, different reviewer must confirm before this takes effect.'
+					: 'Recorded.'
+				: `Refused: ${outcome.reason}`;
+
+	let items: QueueItem[] = [];
+	try {
+		items = await listQueue(c.env.DB);
+	} catch {
+		items = [];
+	}
+	return c.html(reviewPage(items, message), outcome.kind === 'refused' ? 400 : 200);
 });
 
 // --- Official Notices: upload-a-signed-notice (never compose-and-sign) --------
