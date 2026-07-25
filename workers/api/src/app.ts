@@ -1345,8 +1345,10 @@ interface LiveBoardStub {
  * publisher quorum against its own pinned directory before it will address any
  * board. A Worker-side check here would be defence-in-depth at best and, at
  * worst, the thing a client learns to trust instead — and a compelled Worker can
- * be compelled to skip an `if`. It cannot forge a signature, because no Ed25519
- * signing function exists anywhere in packages/crypto.
+ * be compelled to skip an `if`. It cannot forge a signature, because the platform
+ * holds no zone-publisher secret key: those are generated offline and never enter
+ * the repo, CI, or Cloudflare. packages/crypto does export a generic sign(), but
+ * it needs a key the platform does not have.
  *
  * Serving the list while live_board is off is intentional: the list is a map, not
  * a feed, and a client that holds it can tell "no zones near me" from "the

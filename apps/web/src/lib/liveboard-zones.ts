@@ -4,9 +4,13 @@
  * WHY THE CLIENT IS THE VERIFIER, AND THE WORKER IS NOT. The api serves this list
  * verbatim and does not check it. A compelled Worker can be compelled to skip an
  * `if`, so a server-side check is worth defence-in-depth and nothing more. What a
- * compelled Worker cannot do is forge a publisher signature: no Ed25519 *signing*
- * function exists anywhere in packages/crypto, only verification. So the quorum
- * check has to happen where the adversary cannot reach it, which is here.
+ * compelled Worker cannot do is forge a publisher signature, because the platform
+ * holds no zone-publisher secret key and cannot derive one — those are generated
+ * offline and never enter the repo, CI, or Cloudflare. (packages/crypto DOES
+ * export a generic Ed25519 sign(); it needs a secret key, and for this role the
+ * platform has none. An earlier draft of this comment claimed no signing function
+ * existed at all, which was wrong.) So the quorum check has to happen where the
+ * adversary cannot reach it, which is here.
  *
  * WHY IT MATTERS THAT THE LIST IS AUTHENTIC. A zone id is a Durable Object
  * instance name and a display label. An attacker who could inject a zone could
