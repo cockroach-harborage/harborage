@@ -5,6 +5,10 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
+		"./compartments": "./src/compartments.ts",
+		"./device-keys": "./src/device-keys.ts",
+		"./hkdf-tree": "./src/hkdf-tree.ts",
+		"./mnemonic": "./src/mnemonic.ts",
 		"./minisign": "./src/minisign.ts",
 		"./pack": "./src/pack.ts",
 		"./notice": "./src/notice.ts",

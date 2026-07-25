@@ -13,6 +13,7 @@
  * lazy-loaded via ./sodium only behind vault/broker features — never on first paint.
  */
 export * from './mnemonic.ts';
+export * from './compartments.ts';
 export * from './hkdf-tree.ts';
 export * from './seal.ts';
 export * from './minisign.ts';
