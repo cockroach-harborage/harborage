@@ -66,8 +66,13 @@ function makeFakes(opts: FakeOptions = {}) {
 	const presignCalls: number[] = [];
 	let completed = 0;
 	let aborted = 0;
+	let created = 0;
+	let heads = 0;
 	const presign: PresignClient = {
-		createMultipart: async () => ({ key: 'ulid-key', uploadId: 'upload-1' }),
+		createMultipart: async () => {
+			created++;
+			return { key: 'ulid-key', uploadId: 'upload-1' };
+		},
 		presignPart: async (_c: MultipartCursor, n: number) => {
 			presignCalls.push(n);
 			return `https://r2/part/${n}`;
@@ -83,7 +88,10 @@ function makeFakes(opts: FakeOptions = {}) {
 		abortMultipart: async () => {
 			aborted++;
 		},
-		headObject: async () => opts.objectExists ?? false
+		headObject: async () => {
+			heads++;
+			return opts.objectExists ?? false;
+		}
 	};
 	const transport: PartTransport = {
 		putPart: async (url: string) => {
@@ -99,7 +107,7 @@ function makeFakes(opts: FakeOptions = {}) {
 		presign,
 		transport,
 		presignCalls,
-		stats: () => ({ completed, aborted })
+		stats: () => ({ completed, aborted, created, heads })
 	};
 }
 
@@ -170,6 +178,43 @@ describe('multipart engine', () => {
 		expect(result.outcome).toBe('retry_later');
 		expect(result.item.original.r2).toBeUndefined();
 		expect(result.item.originalStatus).toBe('on_device_only');
+	});
+
+	it('keeps the cursor and every ETag when complete fails retryably', async () => {
+		// The #53 regression, at the engine level. `completeMultipart` used to map
+		// every non-2xx to no_such_upload, which sends the uploader down the
+		// restart path: HEAD, miss, drop the cursor, re-upload every part from
+		// zero. A transient 429 after forty minutes of 2G silently threw away the
+		// whole upload. A retryable complete must change nothing but the attempt
+		// count.
+		const size = PART_SIZE * 3; // 3 parts
+		const store = new MemoryStore();
+		const fakes = makeFakes({ failComplete: new TransportError('retryable', 'complete 429') });
+		const up = new MultipartUploader(store, fakes.presign, fakes.transport);
+		const result = await up.step(makeItem(size), makeCipher(size));
+
+		expect(result.outcome).toBe('retry_later');
+		expect(result.item.original.r2).toBeDefined();
+		expect(result.item.original.r2?.parts.map((p) => p.etag)).toEqual([
+			'etag-1',
+			'etag-2',
+			'etag-3'
+		]);
+		expect(result.item.original.r2?.nextPart).toBe(4);
+		expect(result.item.attempts).toBe(1);
+		// Never restarted: one create, no HEAD, no re-upload.
+		expect(fakes.stats().created).toBe(1);
+		expect(fakes.stats().heads).toBe(0);
+
+		// And the next attempt completes from the persisted cursor without
+		// re-sending a single part.
+		const clean = makeFakes();
+		const up2 = new MultipartUploader(store, clean.presign, clean.transport);
+		const resumed = await up2.step((await store.get('item-1'))!, makeCipher(size));
+		expect(resumed.outcome).toBe('done');
+		expect(resumed.item.originalStatus).toBe('vaulted');
+		expect(clean.presignCalls).toEqual([]);
+		expect(clean.stats().created).toBe(0);
 	});
 
 	it('treats no_such_upload on complete as success when a HEAD confirms the object', async () => {
