@@ -14,10 +14,12 @@
  * compromise therefore yields a bundle that still has to survive verification
  * twice more — once in the api, once on every reader's device.
  *
- * THE CONSOLE HOLDS NO PRIVATE KEY AND PERFORMS NO SIGNING. There is no Ed25519
- * signing function anywhere in packages/crypto, only verification, so a compelled
- * console cannot manufacture a reviewer signature — it can only fail to check one,
- * which is why the api and the reader both check again.
+ * THE CONSOLE HOLDS NO REVIEWER PRIVATE KEY AND PERFORMS NO SIGNING. Reviewer keys
+ * are generated in an offline m-of-n ceremony and live on APK-gated reviewer
+ * devices; they never enter the repo, CI, or Cloudflare. So a compelled console
+ * cannot manufacture a reviewer signature — it can only fail to CHECK one, which is
+ * why the api and the reader both check again. (packages/crypto does export a
+ * generic Ed25519 sign(); it needs a secret key this side does not hold.)
  *
  * NO D1 BINDING, deliberately. The public read model has one writer (the api,
  * after re-verification). A console DO that wrote accountability_records directly
