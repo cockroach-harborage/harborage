@@ -220,13 +220,18 @@ I will tell you which slice needs this, one PR ahead.
 
 ### 2.4 Every production deploy
 
-Actions → the run → **Review deployments** → `production` → Approve. The
-`apply` and `deploy` jobs pause separately.
+Actions → the run → **Review deployments** → `production` → Approve. Three jobs
+pause separately: `plan`, `apply`, then `deploy`.
 
-The `infra (tofu plan)` job runs **before** either gate, so by the time you are
-asked to approve, the plan is already on screen: open that job, or read the run
-summary, which carries the same output. Plan and apply used to be one step,
-which meant approving before anything had run.
+The first approval only lets `tofu plan` run, which reads and changes nothing.
+Approve it without ceremony. **The second one is the one that matters**: by
+then the plan is on screen (open the `infra (tofu plan)` job, or read the run
+summary, which carries the same output) and the destroy guard has had its say.
+
+Plan and apply used to be one step, so the approval happened before anything
+had run and the plan appeared only afterwards. All three jobs are gated because
+every secret here is scoped to the `production` environment; an ungated job
+reads them as empty and tofu fails with "No valid credential sources found".
 
 A destroy on Email records, the Access application, or signing-key config is a
 **bug**. You no longer have to catch it by eye: the **Destroy guard** step fails

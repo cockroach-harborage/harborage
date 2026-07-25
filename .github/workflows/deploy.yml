@@ -4,10 +4,10 @@
 # from state with R2-scoped credentials and deploys with the scoped
 # HB_DEPLOY_TOKEN.
 #
-# plan (ungated) -> apply (approval) -> deploy (approval)
-# The plan is printed and machine-checked for destroys before anyone is asked
-# to approve anything; see the comment on the plan job for why it is not gated
-# and why the plan file is not passed between jobs.
+# plan -> apply -> deploy, each gated on the production environment.
+# The plan is printed and machine-checked for destroys BEFORE the apply is
+# approved, which is the approval that matters. See the comment on the plan job
+# for why it is gated too, and why the plan file is not passed between jobs.
 name: deploy
 
 on:
@@ -21,18 +21,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Plan runs BEFORE the approval gate, on purpose.
+  # Plan is its own job so the plan is VISIBLE before the apply is approved.
   #
-  # RUNBOOK says to read the plan before approving, but plan and apply used to
-  # be one step, so there was no moment between them: approving was a blind
-  # click on a job that had not run yet. Splitting them means the plan, and the
-  # destroy guard's verdict, are on screen before anyone approves anything.
+  # RUNBOOK says to read the plan before approving. Plan and apply used to be
+  # one step in one gated job, so there was no moment between them: the
+  # approval happened before the plan had run, and the output only appeared
+  # afterwards. Now the plan job runs first and prints to the run summary, so
+  # the apply approval is made with the plan on screen.
   #
-  # This job holds the Terraform token without an approval gate. That is a
-  # deliberate, bounded widening: `tofu plan` cannot mutate infrastructure, it
-  # runs no third-party package code (§17.3 is about which job can execute
-  # untrusted code, not about which job is gated), and it is the only way to
-  # produce something worth reviewing.
+  # This job is ALSO gated on `production`, which costs a second approval
+  # click. It is not optional: every secret in this repository is scoped to the
+  # production environment (there are no repository-level secrets), so an
+  # ungated job reads them as empty strings and tofu fails with "No valid
+  # credential sources found". The alternative — promoting the Terraform token
+  # and the state credentials to repository scope — would let any workflow job
+  # in the repo read them, which is a materially worse trade than one extra
+  # click on a read-only operation.
+  #
+  # So: approval 1 authorises a read-only plan; approval 2 authorises the apply
+  # and is the one that matters, because by then the plan and the destroy
+  # guard's verdict are both visible.
   #
   # The plan file is NOT passed as an artifact. It carries resource attributes
   # in cleartext, and this repository is public, so an artifact would publish
@@ -41,6 +49,7 @@ jobs:
   plan:
     name: infra (tofu plan)
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
     steps:
