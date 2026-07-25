@@ -47,6 +47,8 @@ export interface ConsoleEnv extends FlagBindings {
 export interface ApiEnv extends FlagBindings {
 	DB: D1Database;
 	RATE_LIMIT: DurableObjectNamespace;
+	/** Per-item §15 state machine. Hosted here; the consumer binds it cross-script. */
+	VERIFICATION_STATE: DurableObjectNamespace;
 	MODERATION_BULK: Queue;
 	LIFE_SAFETY: Queue;
 	/** Read cache of the signed Key Directory + Revocation List (notice verify). */

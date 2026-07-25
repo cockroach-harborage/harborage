@@ -9,6 +9,7 @@ import { safeLog } from '@harborage/worker-lib/safe-log';
 import type { ApiEnv } from '@harborage/worker-lib/types';
 
 export { RateLimit } from './do/RateLimit.ts';
+export { VerificationState } from './do/VerificationState.ts';
 
 export default {
 	fetch: (req: Request, env: ApiEnv, ctx: ExecutionContext) => app.fetch(req, env, ctx),

@@ -14,12 +14,21 @@
 	"workers_dev": false,
 	"routes": [{ "pattern": "cockroachharborage.org/api/*", "zone_name": "cockroachharborage.org" }],
 	"durable_objects": {
-		"bindings": [{ "name": "RATE_LIMIT", "class_name": "RateLimit" }]
+		"bindings": [
+			{ "name": "RATE_LIMIT", "class_name": "RateLimit" },
+			{ "name": "VERIFICATION_STATE", "class_name": "VerificationState" }
+		]
 	},
 	// SQLite-backed (mandatory for new namespaces, 2026-07-09) but kept wholly
 	// in-memory: the class never touches storage (gate-memory-only), so nothing
 	// persists and there is no compellable PITR record.
-	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimit"] }],
+	// Never edit a deployed tag; add a new one. VerificationState is SQLite-backed
+	// and field-forbidden (gate-memory-only): it may persist state and counters,
+	// never who reported or corroborated, where, or when an individual acted.
+	"migrations": [
+		{ "tag": "v1", "new_sqlite_classes": ["RateLimit"] },
+		{ "tag": "v2", "new_sqlite_classes": ["VerificationState"] }
+	],
 	"kv_namespaces": [
 		{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" },
 		// Read cache of the signed Key Directory + Revocation List (notice verify).
