@@ -121,6 +121,16 @@ export class R2S3 {
 		return res.ok;
 	}
 
+	/** Short-lived GET, for reading back a derivative we already published. */
+	async presignGet(bucket: string, key: string, ttlSeconds = 900): Promise<string> {
+		const url = new URL(this.objUrl(bucket, key));
+		url.searchParams.set('X-Amz-Expires', String(ttlSeconds));
+		const signed = await this.client.sign(new Request(url, { method: 'GET' }), {
+			aws: { signQuery: true }
+		});
+		return signed.url;
+	}
+
 	async presignPut(bucket: string, key: string, ttlSeconds = 900): Promise<string> {
 		const url = new URL(this.objUrl(bucket, key));
 		url.searchParams.set('X-Amz-Expires', String(ttlSeconds));

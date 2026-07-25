@@ -22,7 +22,7 @@ import {
 } from '@harborage/worker-lib/cap-cert';
 import { admitCredential, bucketKey, broadTiersOk } from '@harborage/worker-lib/ratelimit';
 import type { Compartment } from '@harborage/crypto/compartments';
-import { advanceProbation, dedupVerdict } from '@harborage/worker-lib/archive';
+import { advanceProbation, bandsOf, dedupVerdict, isDhash64 } from '@harborage/worker-lib/archive';
 import { assembleBsaExport } from '@harborage/worker-lib/archive';
 
 /** Mirrors the CHECK constraint in migration 0017. */
@@ -303,6 +303,57 @@ app.get('/api/directory/pack', async (c) => {
 // GET /api/intake/status — public feature-flag booleans so the client can show
 // or hide the off-device send / directory-write affordances. Not sensitive.
 // Fail-closed to OFF; brief cache. The Workers remain the authoritative gate.
+/**
+ * Point at a clip that lives somewhere else (ARCHITECTURE §16, §7.3).
+ *
+ * FINGERPRINT AND REFERENCE ONLY. This route makes NO outbound request — not a
+ * disabled one, not one behind a flag: there is no fetch in this handler at
+ * all. Re-hosting someone else's media is the counsel-gated source-terms
+ * question, and the off-platform egress that would make it safe to attempt does
+ * not exist. No URL is stored either, because a URL plus a submission time is a
+ * soft link between a submitter and a target.
+ */
+app.post('/api/archive/import', async (c) => {
+	const raw = new Uint8Array(await c.req.raw.clone().arrayBuffer());
+	let body: { canonical_content_id?: unknown; dhash64?: unknown };
+	try {
+		body = JSON.parse(new TextDecoder().decode(raw));
+	} catch {
+		return c.json({ error: 'bad body' }, 400);
+	}
+	const id = body.canonical_content_id;
+	const dhash = body.dhash64;
+	if (typeof id !== 'string' || id.length === 0 || id.length > 200)
+		return c.json({ error: 'bad body' }, 400);
+	// A URL is not a content id. Refusing it here keeps the "no URL is stored"
+	// claim true even if a client sends one by habit.
+	if (/^[a-z][a-z0-9+.-]*:\/\//i.test(id)) return c.json({ error: 'bad body' }, 400);
+	if (typeof dhash !== 'string' || !isDhash64(dhash)) return c.json({ error: 'bad body' }, 400);
+
+	if (!(await broadOk(c))) return c.text('slow down', 429);
+	if (
+		!(await featureAvailable(c.env.FLAGS, 'source_import', { disabledUnderHeightenedThreat: true }))
+	)
+		return c.text('not open', 403);
+
+	const credential = await credentialOk(c, raw, 'document');
+	if (!credential.ok) {
+		safeLog('credential_rejected', { route: c.req.routePath, outcome: credential.outcome });
+		return c.text('credential required', 401);
+	}
+
+	const [b0, b1, b2, b3] = bandsOf(dhash);
+	await c.env.DB.prepare(
+		`INSERT INTO archive_source_refs
+			(canonical_content_id, dhash64, band0, band1, band2, band3, reference_state, first_seen_bucket)
+		 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'REFERENCED', ?7)
+		 ON CONFLICT(canonical_content_id) DO NOTHING`
+	)
+		.bind(id, dhash, b0, b1, b2, b3, new Date().toISOString().slice(0, 10))
+		.run();
+	return c.json({ ok: true }, 202, { 'cache-control': 'no-store' });
+});
+
 /**
  * Dedup: may the client skip uploading this PUBLIC derivative?
  *

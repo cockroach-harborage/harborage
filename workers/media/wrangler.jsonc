@@ -23,5 +23,15 @@
 			{ "name": "RATE_LIMIT", "class_name": "RateLimit", "script_name": "harborage-api" }
 		]
 	},
-	"kv_namespaces": [{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" }]
+	"kv_namespaces": [{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" }],
+	// Cloudflare Images, for the optional server-side archive master. Verified
+	// against the live docs 2026-07-25: this binding is a TOP-LEVEL object with
+	// one key and NO resource id, so unlike every other binding here it needs no
+	// infra output and no REPLACE_* injection in CI.
+	"images": { "binding": "IMAGES" },
+	// Responses from the Images binding are NOT cached automatically, and every
+	// uncached call is a full decode and re-encode. The master route is
+	// content-addressed and idempotent, so caching costs nothing and skips the
+	// repeat work.
+	"cache": { "enabled": true }
 }

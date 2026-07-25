@@ -162,3 +162,43 @@ describe('the probation sweep', () => {
 		expect(d.updates[0]![0]).toBe('CLEARED');
 	});
 });
+
+describe('importing a reference to media held elsewhere', () => {
+	it('makes no outbound request', async () => {
+		// Not a disabled fetch, not one behind a flag: there is no fetch in the
+		// handler at all. Re-hosting is the counsel-gated source-terms question.
+		const source = await import('node:fs/promises').then((fs) =>
+			fs.readFile(new URL('../src/app.ts', import.meta.url), 'utf8')
+		);
+		const start = source.indexOf("app.post('/api/archive/import'");
+		const handler = source.slice(start, source.indexOf('app.post(', start + 10));
+		expect(handler).not.toMatch(/\bfetch\s*\(/);
+	});
+
+	it('stores no URL, and refuses one sent as a content id', async () => {
+		const res = await post(
+			'/api/archive/import',
+			{ canonical_content_id: 'https://example.org/clip/1', dhash64: '0123456789abcdef' },
+			env({ FLAGS: flags(true) })
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it('refuses a fingerprint that is not a 64-bit hash', async () => {
+		const res = await post(
+			'/api/archive/import',
+			{ canonical_content_id: 'publisher:clip-1', dhash64: 'nope' },
+			env({ FLAGS: flags(true) })
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it('refuses while source_import is off', async () => {
+		const res = await post(
+			'/api/archive/import',
+			{ canonical_content_id: 'publisher:clip-1', dhash64: '0123456789abcdef' },
+			env()
+		);
+		expect(res.status).toBe(403);
+	});
+});
