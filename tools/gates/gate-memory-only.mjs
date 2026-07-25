@@ -33,6 +33,22 @@ const STORAGE_RE =
 // Storage-shaped absence is the whole invariant, so both stores must be barred.
 const D1_RE = /\b(D1Database|DB\s*\.\s*(prepare|batch|exec|dump|withSession))\b/;
 
+// Three holes the two matchers above leave open, closed before M4/M5 drive
+// through them. Each is additive, so no existing classification changes.
+//
+//  1. D1_RE is anchored on the literal binding name `DB`. A class reaching for
+//     `this.env.ARCHIVE.prepare(...)` is just as durable and matches nothing,
+//     so the query shape is matched independently of what the binding is called.
+//  2. Neither matcher knows about R2. A Broker writing brokered ciphertext to a
+//     bucket "just until the recipient collects it" creates a durable object
+//     with a timestamp recording that an exchange happened — the record the
+//     memory-only classes exist to not have.
+//  3. WebSocket Hibernation persists `serializeAttachment` payloads across
+//     eviction. That is durable state wearing a different name, and it is
+//     exactly how a hibernating LiveBoard would be tempted to keep its sketch.
+const DURABLE_RE =
+	/\b(R2Bucket|serializeAttachment|deserializeAttachment|setWebSocketAutoResponse|\w+\s*\.\s*(prepare|withSession)\s*\()/;
+
 const problems = [];
 const found = [];
 for (const top of ['apps', 'workers']) {
@@ -43,7 +59,7 @@ for (const top of ['apps', 'workers']) {
 		const rel = relative(repoRoot, file);
 		found.push(cls);
 		if (WHOLLY_MEMORY.includes(cls)) {
-			const m = text.match(STORAGE_RE) ?? text.match(D1_RE);
+			const m = text.match(STORAGE_RE) ?? text.match(D1_RE) ?? text.match(DURABLE_RE);
 			if (m) problems.push(`${rel} — wholly-memory class ${cls} touches durable storage (${m[0]})`);
 		} else if (cls in FIELD_FORBIDDEN) {
 			const m = text.match(FIELD_FORBIDDEN[cls]);

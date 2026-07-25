@@ -1,0 +1,5 @@
+{
+	"name": "fixture-api",
+	"main": "src/index.ts",
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimit"] }]
+}
