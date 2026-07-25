@@ -10,6 +10,7 @@
 import { extract, expand } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
+import { domainSeparate, type SigContext } from './compartments.ts';
 
 const SALT = new TextEncoder().encode('harborage/v1');
 
@@ -51,13 +52,32 @@ export function boxKeypair(seed32: Uint8Array): BoxKeypair {
 	return { secretKey: seed32, publicKey: x25519.getPublicKey(seed32) };
 }
 
-export function sign(message: Uint8Array, secretKey: Uint8Array): Uint8Array {
-	return ed25519.sign(message, secretKey);
+/**
+ * Sign under a domain-separation context (§17.6). The context is MANDATORY:
+ * these keys sign more than one protocol, and a signature over raw bytes can
+ * be lifted from one protocol into another (a cap-cert signature replayed as
+ * a proof-of-possession, or the reverse). `domainSeparate` frames the tag
+ * length-first so the tag set is prefix-free.
+ *
+ * gate-sig-context keeps `ed25519.sign` from being reached directly anywhere
+ * else, so there is no un-separated path back.
+ */
+export function sign(
+	context: SigContext,
+	message: Uint8Array,
+	secretKey: Uint8Array
+): Uint8Array {
+	return ed25519.sign(domainSeparate(context, message), secretKey);
 }
 
-export function verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): boolean {
+export function verify(
+	context: SigContext,
+	signature: Uint8Array,
+	message: Uint8Array,
+	publicKey: Uint8Array
+): boolean {
 	try {
-		return ed25519.verify(signature, message, publicKey);
+		return ed25519.verify(signature, domainSeparate(context, message), publicKey);
 	} catch {
 		return false;
 	}

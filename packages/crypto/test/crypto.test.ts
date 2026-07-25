@@ -16,6 +16,7 @@ import {
 	rootKeyFromSeed,
 	seal,
 	sharedSecret,
+	SIG_CONTEXT,
 	sign,
 	signingKeypair,
 	splitSecret,
@@ -69,9 +70,19 @@ describe('HKDF compartment tree', () => {
 	it('signs and verifies with a derived Ed25519 key', () => {
 		const kp = signingKeypair(compartmentSeed(root, 'posts', 1));
 		const msg = enc.encode('hello');
-		const sig = sign(msg, kp.secretKey);
-		expect(verify(sig, msg, kp.publicKey)).toBe(true);
-		expect(verify(sig, enc.encode('tampered'), kp.publicKey)).toBe(false);
+		const sig = sign(SIG_CONTEXT.capCert, msg, kp.secretKey);
+		expect(verify(SIG_CONTEXT.capCert, sig, msg, kp.publicKey)).toBe(true);
+		expect(verify(SIG_CONTEXT.capCert, sig, enc.encode('tampered'), kp.publicKey)).toBe(false);
+	});
+
+	// The whole point of the context: one key signs several protocols, and a
+	// signature must not survive being lifted from one into another.
+	it('a signature does not verify under a different context', () => {
+		const kp = signingKeypair(compartmentSeed(root, 'posts', 1));
+		const msg = enc.encode('same bytes, different protocol');
+		const sig = sign(SIG_CONTEXT.capCert, msg, kp.secretKey);
+		expect(verify(SIG_CONTEXT.pop, sig, msg, kp.publicKey)).toBe(false);
+		expect(verify(SIG_CONTEXT.corroboration, sig, msg, kp.publicKey)).toBe(false);
 	});
 
 	it('X25519 both sides derive the same shared secret', () => {

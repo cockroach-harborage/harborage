@@ -29,6 +29,12 @@
 		() => m.limits_4(),
 		() => m.limits_5(),
 		() => m.limits_6(),
+		// The account has no reset by design, so the backup words carry the whole
+		// weight of recovery. Keeping them on the phone is offered because some
+		// people cannot write things down, and it trades account loss for device
+		// seizure. A user cannot weigh that unless it is said here too.
+		() => m.limits_6a(),
+		() => m.limits_6b(),
 		() => m.limits_7(),
 		// Media originals and the written note have different custody. Saying
 		// "what you send sealed, we cannot read" over both was true of the photo
