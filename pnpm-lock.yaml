@@ -207,6 +207,9 @@ importers:
 
   workers/media:
     dependencies:
+      '@harborage/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
       '@harborage/worker-lib':
         specifier: workspace:*
         version: link:../../packages/worker-lib

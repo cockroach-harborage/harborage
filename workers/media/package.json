@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@harborage/crypto": "workspace:*",
     "@harborage/worker-lib": "workspace:*",
     "aws4fetch": "1.0.20",
     "hono": "^4.12.0"

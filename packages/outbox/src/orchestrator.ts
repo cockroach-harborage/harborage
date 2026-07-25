@@ -69,6 +69,17 @@ export class OutboxOrchestrator {
 		}
 
 		// Phase 3 — sealed original (resumable). Never before phases 1 and 2.
+		//
+		// An item with no pristine original — a written note — has nothing to
+		// vault, and is DONE once registered. Starting a multipart for it would
+		// create an empty vault object and, worse, walk it toward a `vaulted`
+		// custody status that §19:1261 makes load-bearing in legal exports.
+		if (item.originalStatus === 'none') {
+			item.state = 'done';
+			await this.store.put(item);
+			return item;
+		}
+
 		const cipher = await this.cipher.getCipher(item);
 		const result = await this.uploader.step(item, cipher);
 		return result.item;
