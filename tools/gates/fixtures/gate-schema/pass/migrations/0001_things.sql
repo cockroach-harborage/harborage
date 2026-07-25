@@ -1,0 +1,4 @@
+CREATE TABLE things (
+	id TEXT PRIMARY KEY,
+	kind TEXT NOT NULL
+);

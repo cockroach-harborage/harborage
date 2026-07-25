@@ -1,0 +1,9 @@
+{
+	"endpoints": [
+		{
+			"endpoint": "POST /api/things/register",
+			"class": "SEALED-TO-PLATFORM",
+			"note": "Fixture endpoint for gate-selftest."
+		}
+	]
+}

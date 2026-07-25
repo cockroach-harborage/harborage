@@ -1083,6 +1083,7 @@ The build **fails** if any of these trip:
 - **Memory-only invariant test** — fails if LiveBoard/Broker/RateLimit/CIB/VerificationState hot-path code writes signal/location/timing/token→identity/pubkey fields to DO SQLite or D1.
 - **Sensitive-write-must-be-sealed test** — the intake Worker rejects any non-sealed body on a sensitive endpoint.
 - **Supply chain** — actions SHA-pinned (zizmor/ratchet), `--frozen-lockfile`, lifecycle scripts allow-listed, `harden-runner` egress-block, secret scanning + push protection, Dependabot never auto-merged, signed commits on `main`.
+- **Gate self-test** — `tools/gates/gate-selftest.mjs` runs every other `gate-*.mjs` against a `tools/gates/fixtures/<gate>/{pass,fail}/` pair via the `HARBORAGE_GATE_ROOT` override in `lib.mjs`, and fails the build if a gate rejects clean input, **accepts broken input**, or has no fixtures at all. Added because none of the nine gates had ever been shown capable of failing, and two shipped that could not (see the `gate-sealed-body` header). A gate that cannot fail is worse than no gate: it prints a green check over an unenforced invariant. Nothing in CI or the deploy path sets the override.
 
 ### 17.6 DDoS, rate-limits, anti-replay, PWA cache safety
 - **Volumetric L7 DDoS** relies on Cloudflare's managed/unmetered rulesets; WAF custom-characteristic rate-limiting needs Business+, so the **RateLimit DO is the deliberate app-layer substitute** (per-cap-cert / per-ASN-bucket / global token buckets). Never rate-limit *reading* public safety info.
