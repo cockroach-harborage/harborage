@@ -78,6 +78,21 @@ export interface ApiEnv extends FlagBindings {
 }
 
 /** workers/media — M1 */
+/**
+ * The slice of the Images binding this Worker uses. Typed locally rather than
+ * pulled from a global: `.info()` and one transform chain is the whole surface,
+ * and narrowing it here means a future call to something else is a type error
+ * rather than a silent new dependency on a third-party product.
+ */
+export interface ImagesBinding {
+	info(stream: ReadableStream): Promise<{ format: string; fileSize: number; width?: number; height?: number }>;
+	input(stream: ReadableStream): {
+		transform(opts: { width?: number; height?: number }): {
+			output(opts: { format: string; quality?: number }): Promise<{ response(): Response }>;
+		};
+	};
+}
+
 export interface MediaEnv extends FlagBindings {
 	/**
 	 * S3-API credentials for presigning only (bucket-scoped, short-TTL URLs).
@@ -87,6 +102,15 @@ export interface MediaEnv extends FlagBindings {
 	R2_PRESIGN_ACCESS_KEY_ID?: string;
 	R2_PRESIGN_SECRET_ACCESS_KEY?: string;
 	R2_ACCOUNT_ID?: string;
+	/**
+	 * Cloudflare Images, for the optional server-side archive master.
+	 *
+	 * OPTIONAL on purpose. An account without Images enabled must degrade to
+	 * "not open" rather than throwing a 500 on a route that is meant to be an
+	 * optimisation. `ready()` checks for it, so a missing binding closes the
+	 * master route and leaves every other media route working.
+	 */
+	IMAGES?: ImagesBinding;
 	/**
 	 * The api Worker's memory-only RateLimit DO, bound cross-script (script_name:
 	 * "harborage-api"). One shared token-bucket namespace so an unauthenticated
