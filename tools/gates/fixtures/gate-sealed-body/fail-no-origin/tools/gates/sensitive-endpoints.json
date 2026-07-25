@@ -7,11 +7,6 @@
 			"endpoint": "POST /api/things/ping",
 			"why": "Carries a liveness probe and nothing else, so registering it with a custody class would be a claim over a body that holds nothing to have custody of.",
 			"origin": "any"
-		},
-		{
-			"endpoint": "POST /api/things/gone",
-			"why": "A recorded decision about a route that was renamed away. It reads as coverage of something and covers nothing at all.",
-			"origin": "any"
 		}
 	],
 	"endpoints": [
@@ -23,8 +18,7 @@
 			"platform_key": {
 				"binding": "INTAKE_PRIVATE_KEY",
 				"why": "Private half of the intake sealed-box keypair, held only by the consumer, which is the sole reader of the metadata envelope."
-			},
-			"origin": "any"
+			}
 		},
 		{
 			"endpoint": "POST /api/things/keyring",

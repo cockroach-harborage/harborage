@@ -39,6 +39,8 @@ const registryPath = join(repoRoot, 'tools/gates/sensitive-endpoints.json');
 const problems = [];
 
 const CLASSES = ['SEALED-E2E', 'SEALED-TO-PLATFORM'];
+const ORIGINS = ['any', 'onion'];
+const onionRegistryPath = join(repoRoot, 'tools/gates/onion-only-endpoints.json');
 // Bindings that mean "this worker can decrypt". Which ciphertext they can
 // decrypt is what the sealed_object lane records.
 const UNSEAL_SECRET_RE = /"?\b([A-Z0-9_]*(UNSEAL|PRIVATE_KEY|SECRET_KEY|DECRYPT)[A-Z0-9_]*)\b"?/;
@@ -125,6 +127,20 @@ function existingUnsealBindings() {
 }
 const existing = existingUnsealBindings();
 
+/** Endpoints whose handler block actually calls the onion guard. */
+const guardedEndpoints = new Set();
+for (const block of handlerBlocks(routerText)) {
+	if (/\brequireOnionOrigin\s*\(/.test(block.text))
+		guardedEndpoints.add(`${block.method} ${block.path}`);
+}
+/** Endpoints gate-onion-only knows about. */
+const onionRegistered = new Set();
+if (existsSync(onionRegistryPath)) {
+	for (const e of JSON.parse(readFileSync(onionRegistryPath, 'utf8')).endpoints ?? []) {
+		if (e && typeof e.endpoint === 'string') onionRegistered.add(e.endpoint);
+	}
+}
+
 for (const raw of entries) {
 	// Structured entries only: a bare string cannot carry a custody class, and
 	// silently defaulting one would reintroduce the overclaim this gate exists
@@ -135,7 +151,7 @@ for (const raw of entries) {
 		);
 		continue;
 	}
-	const { endpoint, class: cls, sealed_object: lane } = raw;
+	const { endpoint, class: cls, sealed_object: lane, origin } = raw;
 	if (!endpoint) {
 		problems.push(`registry entry ${JSON.stringify(raw)} has no "endpoint"`);
 		continue;
@@ -154,6 +170,33 @@ for (const raw of entries) {
 		);
 		continue;
 	}
+
+	// --- Origin -------------------------------------------------------------
+	// Which network may reach this endpoint. No default: either one would decide
+	// a safety question for the author. And the REGISTRY IS NOT TRUSTED — the
+	// code decides, and the two must agree. Without the cross-check below,
+	// relabelling a life-safety endpoint "any" and dropping it from the onion
+	// registry silently disables every onion check on it, and both gates go
+	// quiet at once.
+	if (!ORIGINS.includes(origin)) {
+		problems.push(
+			`${endpoint}: "origin" must be one of ${ORIGINS.join(' | ')}, got ${JSON.stringify(origin)}`
+		);
+		continue;
+	}
+	const guarded = guardedEndpoints.has(endpoint);
+	if (origin === 'onion' && !guarded)
+		problems.push(
+			`${endpoint} is registered origin "onion" but its handler does not call requireOnionOrigin. The code decides; the registry must agree`
+		);
+	if (origin === 'any' && guarded)
+		problems.push(
+			`${endpoint} calls requireOnionOrigin but is registered origin "any". Relabelling a life-safety endpoint is how both gates go quiet at once`
+		);
+	if (origin === 'onion' && !onionRegistered.has(endpoint))
+		problems.push(
+			`${endpoint} is registered origin "onion" here but is absent from tools/gates/onion-only-endpoints.json, so gate-onion-only never checks its guard order or demands its test`
+		);
 
 	// The endpoint must actually be routed, so a stale registry entry cannot
 	// keep the gate green after the handler is renamed or removed.
@@ -175,6 +218,17 @@ for (const raw of entries) {
 	const assertions = (text.match(/\bexpect\s*\(/g) ?? []).length;
 	if (assertions < 2) {
 		problems.push(`${endpoint}: sealed-body test needs at least 2 assertions, found ${assertions}`);
+	}
+	// For an ONION entry the plain 4xx rule goes vacuous: the origin guard returns
+	// 403 to every caller that has not forged an ingress assertion, so a naive
+	// test sees 403, matches, and the sealed-body property is never exercised at
+	// all. That is the "401 fired before the code under test" bug in a new
+	// costume. A non-403 4xx is only reachable past the guard, so requiring one
+	// forces the test to set an ingress key and compute a real assertion.
+	if (origin === 'onion' && !/\b4(?!03)\d{2}\b/.test(text)) {
+		problems.push(
+			`${endpoint}: its sealed-body test asserts no status other than 403. On an onion-only route every refusal is 403, so that proves the origin guard and nothing about the sealed body. Set an ingress key, compute a real assertion, and assert the 400 or 415`
+		);
 	}
 	if (!/\b4\d{2}\b/.test(text)) {
 		problems.push(`${endpoint}: sealed-body test asserts no 4xx rejection status`);

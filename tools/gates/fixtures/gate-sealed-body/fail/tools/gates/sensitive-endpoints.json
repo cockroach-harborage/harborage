@@ -4,7 +4,8 @@
 			"endpoint": "POST /api/things/register",
 			"class": "SEALED-TO-PLATFORM",
 			"sealed_object": "thing-metadata-envelope",
-			"note": "Fixture endpoint for gate-selftest. Broken invariant: no sealed-body rejection test names it."
+			"note": "Fixture endpoint for gate-selftest. Broken invariant: no sealed-body rejection test names it.",
+			"origin": "any"
 		}
 	]
 }

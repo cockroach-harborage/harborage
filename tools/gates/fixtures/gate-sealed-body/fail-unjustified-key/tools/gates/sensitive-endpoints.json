@@ -8,7 +8,8 @@
 			"platform_key": {
 				"binding": "INTAKE_PRIVATE_KEY",
 				"why": "needed"
-			}
+			},
+			"origin": "any"
 		}
 	]
 }

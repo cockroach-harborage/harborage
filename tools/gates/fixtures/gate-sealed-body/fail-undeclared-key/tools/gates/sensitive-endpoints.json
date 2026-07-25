@@ -4,7 +4,8 @@
 			"endpoint": "POST /api/things/register",
 			"class": "SEALED-TO-PLATFORM",
 			"sealed_object": "thing-metadata-envelope",
-			"note": "Fixture endpoint for gate-selftest. Broken invariant: an unseal-shaped binding exists that nobody registered."
+			"note": "Fixture endpoint for gate-selftest. Broken invariant: an unseal-shaped binding exists that nobody registered.",
+			"origin": "any"
 		}
 	]
 }
