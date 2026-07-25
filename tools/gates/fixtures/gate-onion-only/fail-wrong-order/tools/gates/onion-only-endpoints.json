@@ -1,0 +1,9 @@
+{
+	"comment": "Fixture registry. One guarded, registered, tested endpoint.",
+	"endpoints": [
+		{
+			"endpoint": "POST /api/things/triage",
+			"why": "Two source IPs arriving at one low-volume broker inside the jitter window is a pairing sealed-sender cannot hide."
+		}
+	]
+}

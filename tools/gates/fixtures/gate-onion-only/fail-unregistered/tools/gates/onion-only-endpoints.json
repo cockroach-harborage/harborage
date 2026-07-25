@@ -1,0 +1,4 @@
+{
+	"comment": "FAIL fixture: the inverse rule. The registry is EMPTY while a handler in workers/** calls requireOnionOrigin. This is what the first onion-only route looks like if it ships without being registered: the guard is present and works, but nothing requires a test for it, nothing records what pairing it defeats, and the gate would otherwise print success while never having looked at the endpoint at all. Without this rule the gate is vacuous for as long as the list is empty, which is exactly when a new route is most likely to land.",
+	"endpoints": []
+}
