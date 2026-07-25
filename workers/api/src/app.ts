@@ -1337,6 +1337,65 @@ interface LiveBoardStub {
 	view(opts: { sinceTick?: number; waitMs?: number; heightened?: boolean }): Promise<BoardView>;
 }
 
+/**
+ * GET /api/live/zones — the signed zone list, verbatim.
+ *
+ * The Worker does NOT verify this list and deliberately does not try. It is a
+ * public, signed artefact and the reader is the verifier: apps/web re-checks the
+ * publisher quorum against its own pinned directory before it will address any
+ * board. A Worker-side check here would be defence-in-depth at best and, at
+ * worst, the thing a client learns to trust instead — and a compelled Worker can
+ * be compelled to skip an `if`. It cannot forge a signature, because no Ed25519
+ * signing function exists anywhere in packages/crypto.
+ *
+ * Serving the list while live_board is off is intentional: the list is a map, not
+ * a feed, and a client that holds it can tell "no zones near me" from "the
+ * feature is off". Both are things it should be able to say.
+ */
+app.get('/api/live/zones', async (c) => {
+	const headers = { 'cache-control': 'public, max-age=300' };
+	try {
+		const { results } = await c.env.DB.prepare(
+			'SELECT zone_id, region_bucket, label_key, list_epoch, list_signature FROM live_zones WHERE active = 1'
+		).all<{
+			zone_id: string;
+			region_bucket: string;
+			label_key: string;
+			list_epoch: number;
+			list_signature: string;
+		}>();
+
+		// Zero rows is the resting state and it is NOT an error. The client renders
+		// "no zones listed for your area", which is true.
+		if (results.length === 0)
+			return c.json({ list_epoch: 0, zones: [], signatures: [] }, 200, headers);
+
+		// One list, one epoch. Rows disagreeing about the epoch means a half-applied
+		// publish, and half a signed list is a list whose contents nobody signed.
+		const epoch = results[0]?.list_epoch ?? 0;
+		if (results.some((r) => r.list_epoch !== epoch))
+			return c.json({ list_epoch: 0, zones: [], signatures: [] }, 200, headers);
+
+		return c.json(
+			{
+				list_epoch: epoch,
+				zones: results.map((r) => ({
+					zone_id: r.zone_id,
+					region_bucket: r.region_bucket,
+					label_key: r.label_key
+				})),
+				signatures: JSON.parse(results[0]?.list_signature ?? '[]')
+			},
+			200,
+			headers
+		);
+	} catch {
+		// A read failure yields an EMPTY list, never a partial one. The client keeps
+		// whatever list it already verified.
+		return c.json({ list_epoch: 0, zones: [], signatures: [] }, 200, headers);
+	}
+});
+
 /** Longest a reader may hold the connection open. Mirrors LiveBoard's own clamp. */
 const LIVE_MAX_WAIT_MS = 25_000;
 

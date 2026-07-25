@@ -331,3 +331,82 @@ describe('the response carries no count and no coordinate', () => {
 		expect(text).not.toMatch(/"(first_seen|firstSeen|expires|reported_at)\w*"\s*:/i);
 	});
 });
+
+describe('GET /api/live/zones serves the list, and does not vouch for it', () => {
+	function zonesDb(rows: unknown[] | 'throws') {
+		return {
+			prepare: () => ({
+				all: async () => {
+					if (rows === 'throws') throw new Error('d1 unavailable');
+					return { results: rows };
+				},
+				bind: () => ({ first: async () => null })
+			})
+		};
+	}
+
+	const ROW = {
+		zone_id: ZONE,
+		region_bucket: 'IN-DL',
+		label_key: 'zone.delhi.north.gate',
+		list_epoch: 4,
+		list_signature: '[{"key_id":"p1","sig":"AAAA"}]'
+	};
+
+	/** Zero rows is the resting state, and it is not an error. */
+	it('returns an empty list rather than an error when no zone is active', async () => {
+		const res = await get('/api/live/zones', envWith({ DB: zonesDb([]) }));
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ list_epoch: 0, zones: [], signatures: [] });
+	});
+
+	it('returns the rows with their signatures', async () => {
+		const res = await get('/api/live/zones', envWith({ DB: zonesDb([ROW]) }));
+		expect(await res.json()).toEqual({
+			list_epoch: 4,
+			zones: [{ zone_id: ZONE, region_bucket: 'IN-DL', label_key: 'zone.delhi.north.gate' }],
+			signatures: [{ key_id: 'p1', sig: 'AAAA' }]
+		});
+	});
+
+	/**
+	 * A zone row carries no coordinate, and the response carries no column the
+	 * client did not ask for. list_signature is folded into `signatures`; nothing
+	 * else from the row reaches the wire.
+	 */
+	it('emits only the three zone fields', async () => {
+		const res = await get('/api/live/zones', envWith({ DB: zonesDb([ROW]) }));
+		const body = (await res.json()) as { zones: Record<string, unknown>[] };
+		expect(Object.keys(body.zones[0] ?? {}).sort()).toEqual([
+			'label_key',
+			'region_bucket',
+			'zone_id'
+		]);
+	});
+
+	/**
+	 * Rows disagreeing about the epoch is a HALF-APPLIED publish, and half a signed
+	 * list is a list whose contents nobody signed. Refused as a whole, not filtered:
+	 * filtering would leave the subset an attacker chose.
+	 */
+	it('serves nothing when the rows disagree about the epoch', async () => {
+		const res = await get(
+			'/api/live/zones',
+			envWith({ DB: zonesDb([ROW, { ...ROW, zone_id: 'IN-DL-z0418', list_epoch: 5 }]) })
+		);
+		expect(await res.json()).toEqual({ list_epoch: 0, zones: [], signatures: [] });
+	});
+
+	it('serves an empty list, never a partial one, when the read fails', async () => {
+		const res = await get('/api/live/zones', envWith({ DB: zonesDb('throws') }));
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ list_epoch: 0, zones: [], signatures: [] });
+	});
+
+	/** Served while live_board is off: the list is a map, not a feed. */
+	it('serves the list while live_board is off', async () => {
+		const res = await get('/api/live/zones', envWith({ FLAGS: only(), DB: zonesDb([ROW]) }));
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { zones: unknown[] }).zones).toHaveLength(1);
+	});
+});
