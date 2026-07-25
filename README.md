@@ -8,6 +8,7 @@ Open web infrastructure that supports peaceful, lawful, democratic protest and h
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — how it works. §18 is the authoritative reconciliation.
 - [CLAUDE.md](./CLAUDE.md) — binding standards for every contributor and every AI session. Read this before writing code.
 - [RUNBOOK.md](./RUNBOOK.md) — the only manual operational steps.
+- [docs/maintainer-walkthrough.md](./docs/maintainer-walkthrough.md) — step-by-step for the maintainer-only tasks (key ceremony, canary signing, switch-on credentials).
 
 ## Repository
 
