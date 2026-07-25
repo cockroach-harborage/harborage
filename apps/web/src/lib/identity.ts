@@ -30,7 +30,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import { isValidMnemonic, mnemonicToRootSeed, newMnemonic } from '@harborage/crypto/mnemonic';
 import {
-	ACTIVE_COMPARTMENTS,
+	CACHED_COMPARTMENTS,
 	FIRST_EPOCH,
 	isValidEpoch,
 	nextEpoch,
@@ -208,9 +208,20 @@ async function installTree(phrase: string, tier: CustodyTier): Promise<IdentityM
 	const store = await db();
 	await store.put(STORE_KEYS, root, ROOT_KEY);
 
-	// Derive every active compartment now, so a later send never has to reach
-	// for the root while the user is standing somewhere they need to leave.
-	for (const compartment of ACTIVE_COMPARTMENTS) {
+	// Derive the CACHED compartments now, so a later send never has to reach for
+	// the root while the user is standing somewhere they need to leave.
+	//
+	// CACHED_COMPARTMENTS, NOT ACTIVE_COMPARTMENTS, and the difference is
+	// load-bearing. ACTIVE_COMPARTMENTS is the server's list of what it will
+	// accept a certificate for, and M4 widens it to include `medical` and `aid`.
+	// Iterating that list here would install a durable medical key into
+	// IndexedDB on EVERY device at account creation, including the overwhelming
+	// majority that never touch the broker. A seized phone would then carry a
+	// stored artifact of a compartment its owner never used, and a specifically
+	// incriminating one. The brokered compartments are reached through
+	// oneShotContext() below instead, which derives a key per request and stores
+	// nothing.
+	for (const compartment of CACHED_COMPARTMENTS) {
 		const epoch = FIRST_EPOCH;
 		const compartmentSeed = await deriveCompartmentSeed(root, compartment, epoch);
 		try {
@@ -355,9 +366,35 @@ export async function signingAlgFor(compartment: Compartment): Promise<SigningAl
 	const epoch = meta.epochs[compartment];
 	if (epoch === undefined) return null;
 	const key = (await (await db()).get(STORE_KEYS, keyId(compartment, epoch, 'sign'))) as
-		| DeviceSigningKey
-		| undefined;
+		DeviceSigningKey | undefined;
 	return key?.algId ?? null;
+}
+
+/**
+ * Everything credential-core needs to mint a one-shot identity, and nothing
+ * else.
+ *
+ * STRICTLY READ-ONLY. It reads the root key, the custody tier and the current
+ * epoch, and writes nothing: no key row, no `publicKeys` entry, no epoch
+ * write-back. Recording an epoch for a brokered compartment would create
+ * exactly the device record the one-shot design exists to avoid, so the epoch
+ * defaults rather than being persisted on first use.
+ *
+ * The returned `root` is the non-extractable HKDF CryptoKey. Callers derive a
+ * per-request seed from it and discard both.
+ */
+export interface OneShotContext {
+	root: CryptoKey;
+	tier: CustodyTier;
+	epoch: number;
+}
+
+export async function oneShotContext(compartment: Compartment): Promise<OneShotContext> {
+	const meta = await readMeta();
+	if (!meta) throw new Error('no account on this device');
+	const root = (await (await db()).get(STORE_KEYS, ROOT_KEY)) as CryptoKey | undefined;
+	if (!root) throw new Error('no account on this device');
+	return { root, tier: meta.tier, epoch: meta.epochs[compartment] ?? FIRST_EPOCH };
 }
 
 /**
@@ -374,8 +411,7 @@ export async function sign(
 	const epoch = meta.epochs[compartment];
 	if (epoch === undefined) throw new Error(`no key for ${compartment}`);
 	const key = (await (await db()).get(STORE_KEYS, keyId(compartment, epoch, 'sign'))) as
-		| DeviceSigningKey
-		| undefined;
+		DeviceSigningKey | undefined;
 	if (!key) throw new Error(`no key for ${compartment}`);
 	return signWithDeviceKey(key, context, message);
 }

@@ -17,8 +17,13 @@ import {
 	POP_NONCE_LENGTH,
 	type CapCertFields
 } from '@harborage/crypto/cap-cert';
-import { SIG_CONTEXT, type Compartment } from '@harborage/crypto/compartments';
-import { signingAlgFor, publicKeyFor, sign } from '$lib/identity';
+import {
+	ONE_SHOT_ONLY_COMPARTMENTS,
+	SIG_CONTEXT,
+	type Compartment
+} from '@harborage/crypto/compartments';
+import { signingAlgFor, publicKeyFor, sign, oneShotContext } from '$lib/identity';
+import { buildOneShotHeaders } from '$lib/credential-core';
 
 /**
  * Certificates are cached in memory for a fraction of their life so a burst of
@@ -48,6 +53,14 @@ async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
 }
 
 async function certFor(compartment: Compartment): Promise<CachedCert> {
+	// The client-side mirror of the server's one-shot rule. Without it a caller
+	// could reach the cache with 'aid' by habit, mint an hour-long reusable
+	// certificate, and re-link every brokered request it signed. The server would
+	// reject it, but only after the linkable certificate had already been built
+	// and sent, so the refusal belongs here too.
+	if (ONE_SHOT_ONLY_COMPARTMENTS.includes(compartment))
+		throw new Error(`${compartment} is one-shot only; use oneShotCredentialHeaders`);
+
 	const cached = cache.get(compartment);
 	const now = Date.now();
 	if (cached && now - cached.mintedAtMs < CERT_REUSE_MS) return cached;
@@ -101,6 +114,38 @@ export async function credentialHeaders(
 		'X-HB-Cap': b64u(cert.bytes),
 		'X-HB-PoP': b64u(framePop(timestampMs, nonce, signature))
 	};
+}
+
+/**
+ * Headers for a brokered request, from a key that exists for this call only.
+ *
+ * NEVER CACHES, and there is nothing here to cache into: no `cache.set`, no
+ * IndexedDB write, no `meta.publicKeys` entry. Two calls with identical
+ * arguments produce different certificates. That is asserted directly in
+ * credential-roundtrip.test.ts by comparing the two certificates' public keys,
+ * so adding a cache here turns a test red rather than quietly reintroducing
+ * linkability across brokered requests.
+ */
+export async function oneShotCredentialHeaders(
+	compartment: Compartment,
+	method: string,
+	path: string,
+	body: Uint8Array
+): Promise<Record<string, string>> {
+	const ctx = await oneShotContext(compartment);
+	return buildOneShotHeaders(
+		ctx,
+		compartment,
+		method,
+		path,
+		body,
+		(n) => {
+			const b = new Uint8Array(n);
+			crypto.getRandomValues(b);
+			return b;
+		},
+		Date.now()
+	);
 }
 
 /** Drop cached certificates, e.g. after a wipe or a compartment rotation. */

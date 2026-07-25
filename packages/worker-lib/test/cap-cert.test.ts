@@ -11,14 +11,16 @@ import {
 	POP_NONCE_LENGTH,
 	type CapCertFields
 } from '@harborage/crypto/cap-cert';
-import { SIGNING_ALG, SIG_CONTEXT } from '@harborage/crypto/compartments';
+import { SIGNING_ALG, SIG_CONTEXT, type Compartment } from '@harborage/crypto/compartments';
 import { sign, signingKeypair } from '@harborage/crypto/hkdf-tree';
 import {
 	CAP_HEADER,
 	DEFAULT_POLICY,
 	nonceRetentionMs,
 	POP_HEADER,
+	ONE_SHOT_MAX_TTL_MS,
 	verifyRequestCredential,
+	type Admission,
 	type CredentialFailure
 } from '../src/cap-cert.ts';
 
@@ -34,7 +36,6 @@ function flip(buf: Uint8Array, index: number, mask = 0xff): Uint8Array {
 	buf[index] = (buf[index] ?? 0) ^ mask;
 	return buf;
 }
-
 
 function b64u(bytes: Uint8Array): string {
 	let s = '';
@@ -96,12 +97,23 @@ function request(headers: Record<string, string>, url = URL_REGISTER, method = '
 
 async function verify(
 	headers: Record<string, string>,
-	over: { url?: string; method?: string; body?: Uint8Array; nowMs?: number; compartment?: 'document' | 'directory' } = {}
+	over: {
+		url?: string;
+		method?: string;
+		body?: Uint8Array;
+		nowMs?: number;
+		compartment?: Compartment;
+		admission?: Admission;
+	} = {}
 ) {
 	return verifyRequestCredential(
 		request(headers, over.url ?? URL_REGISTER, over.method ?? 'POST'),
 		over.body ?? BODY,
-		{ nowMs: over.nowMs ?? NOW, compartment: over.compartment ?? 'document' }
+		{
+			nowMs: over.nowMs ?? NOW,
+			compartment: over.compartment ?? 'document',
+			...(over.admission ? { admission: over.admission } : {})
+		}
 	);
 }
 
@@ -205,15 +217,19 @@ describe('compartment policy', () => {
 		await expectFailure(headers, 'wrong-compartment');
 	});
 
+	// M4 activated `medical` and `aid`, so this now uses `legal`, which is still
+	// a reserved name. The compartment enum is closed and append-only precisely
+	// so a reserved name can exist in the type system years before any endpoint
+	// will accept one.
 	it('rejects a compartment that is reserved but not active yet', async () => {
-		const { headers } = await headersFor({ compartment: 'medical' });
+		const { headers } = await headersFor({ compartment: 'legal' });
 		await expectFailure(headers, 'wrong-compartment', { compartment: 'document' });
 
 		// Even when the endpoint asks for it, an inactive compartment is refused.
-		const { headers: h2 } = await headersFor({ compartment: 'medical' });
+		const { headers: h2 } = await headersFor({ compartment: 'legal' });
 		const result = await verifyRequestCredential(request(h2), BODY, {
 			nowMs: NOW,
-			compartment: 'medical' as never
+			compartment: 'legal'
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.reason).toBe('inactive-compartment');
@@ -222,7 +238,10 @@ describe('compartment policy', () => {
 
 describe('clocks', () => {
 	it('rejects a certificate that has expired', async () => {
-		const { headers } = await headersFor({ issuedAtMs: NOW - 7200_000, expiresAtMs: NOW - 3600_000 });
+		const { headers } = await headersFor({
+			issuedAtMs: NOW - 7200_000,
+			expiresAtMs: NOW - 3600_000
+		});
 		await expectFailure(headers, 'cert-expired');
 	});
 
@@ -342,5 +361,117 @@ describe('nonce retention', () => {
 		expect(nonceRetentionMs({})).toBeGreaterThanOrEqual(
 			DEFAULT_POLICY.popWindowMs + DEFAULT_POLICY.maxSkewMs
 		);
+	});
+});
+
+/**
+ * ONE-SHOT ADMISSION.
+ *
+ * Every rule below is INVISIBLE FROM A ROUTE TEST. /api/aid/* returns a flat 401
+ * for all of them, and 403 before that when the flag is off, so a route test
+ * asserting "not 202" passes with the whole block deleted. That is exactly why
+ * the policy lives in this pure verifier and is tested here.
+ */
+describe('one-shot admission', () => {
+	const AID_URL = 'https://cockroachharborage.org/api/aid/need';
+	const AID_PATH = '/api/aid/need';
+
+	async function aidHeaders(over: Partial<CapCertFields> = {}) {
+		const cert = makeCert({ compartment: 'aid', ...over });
+		return {
+			[CAP_HEADER]: b64u(cert),
+			[POP_HEADER]: b64u(await makePop(cert, { path: AID_PATH }))
+		};
+	}
+
+	/**
+	 * The rule that stops M4's widening of ACTIVE_COMPARTMENTS from quietly
+	 * letting an hour-long reusable certificate onto the broker. Delete it and a
+	 * brokered request becomes linkable to every other request that key signed.
+	 */
+	it('refuses a brokered compartment on an endpoint that did not ask for one-shot', async () => {
+		const res = await verify(await aidHeaders(), { url: AID_URL, compartment: 'aid' });
+		expect(res.ok).toBe(false);
+		if (!res.ok) expect(res.reason).toBe<CredentialFailure>('one-shot-required');
+	});
+
+	it('accepts the same certificate when the endpoint asks for one-shot', async () => {
+		const res = await verify(await aidHeaders({ expiresAtMs: NOW + 2 * 60_000 }), {
+			url: AID_URL,
+			compartment: 'aid',
+			admission: 'one-shot'
+		});
+		expect(res.ok).toBe(true);
+	});
+
+	/**
+	 * The TTL clamp. It does NOT verify one-shot-ness, which is unobservable on
+	 * the wire; it bounds the cost of being wrong. A certificate minted for one
+	 * request must not claim to outlive the window in which its own proof is
+	 * still fresh.
+	 */
+	it('clamps a one-shot certificate to the proof-freshness window', async () => {
+		const res = await verify(await aidHeaders({ expiresAtMs: NOW + 24 * 60 * 60_000 }), {
+			url: AID_URL,
+			compartment: 'aid',
+			admission: 'one-shot'
+		});
+		expect(res.ok).toBe(false);
+		if (!res.ok) expect(res.reason).toBe<CredentialFailure>('cert-ttl-too-long');
+	});
+
+	it('accepts a certificate at exactly the one-shot ceiling', async () => {
+		const res = await verify(await aidHeaders({ expiresAtMs: NOW + ONE_SHOT_MAX_TTL_MS }), {
+			url: AID_URL,
+			compartment: 'aid',
+			admission: 'one-shot'
+		});
+		expect(res.ok).toBe(true);
+	});
+
+	/** An endpoint may not raise the ceiling by passing a longer maxTtlMs. */
+	it('ignores a maxTtlMs that tries to exceed the one-shot ceiling', async () => {
+		const cert = makeCert({ compartment: 'aid', expiresAtMs: NOW + 60 * 60_000 });
+		const res = await verifyRequestCredential(
+			request(
+				{ [CAP_HEADER]: b64u(cert), [POP_HEADER]: b64u(await makePop(cert, { path: AID_PATH })) },
+				AID_URL
+			),
+			BODY,
+			{
+				nowMs: NOW,
+				compartment: 'aid',
+				admission: 'one-shot',
+				maxTtlMs: 24 * 60 * 60_000
+			}
+		);
+		expect(res.ok).toBe(false);
+		if (!res.ok) expect(res.reason).toBe<CredentialFailure>('cert-ttl-too-long');
+	});
+
+	/**
+	 * A one-shot identity on an ordinarily-cached compartment is a privacy
+	 * improvement, not an error. Refusing it would push callers back toward the
+	 * cache for no reason.
+	 */
+	it('allows one-shot admission on a cached compartment', async () => {
+		const { headers } = await headersFor({ expiresAtMs: NOW + 2 * 60_000 });
+		const res = await verify(headers, { admission: 'one-shot' });
+		expect(res.ok).toBe(true);
+	});
+
+	/** A reserved-but-inactive compartment is still refused, ahead of everything. */
+	it('still refuses a compartment that is not active at all', async () => {
+		const cert = makeCert({ compartment: 'legal' });
+		const res = await verifyRequestCredential(
+			request(
+				{ [CAP_HEADER]: b64u(cert), [POP_HEADER]: b64u(await makePop(cert, { path: AID_PATH })) },
+				AID_URL
+			),
+			BODY,
+			{ nowMs: NOW, compartment: 'legal', admission: 'one-shot' }
+		);
+		expect(res.ok).toBe(false);
+		if (!res.ok) expect(res.reason).toBe<CredentialFailure>('inactive-compartment');
 	});
 });

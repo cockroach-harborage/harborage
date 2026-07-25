@@ -23,7 +23,11 @@ import {
 	type CapCert,
 	type Pop
 } from '@harborage/crypto/cap-cert';
-import { ACTIVE_COMPARTMENTS, type Compartment } from '@harborage/crypto/compartments';
+import {
+	ACTIVE_COMPARTMENTS,
+	ONE_SHOT_ONLY_COMPARTMENTS,
+	type Compartment
+} from '@harborage/crypto/compartments';
 
 export const CAP_HEADER = 'X-HB-Cap';
 export const POP_HEADER = 'X-HB-PoP';
@@ -42,6 +46,27 @@ export const DEFAULT_POLICY = {
 	maxTtlMs: 24 * 60 * 60_000
 } as const;
 
+/**
+ * Longest life a PER-REQUEST certificate may claim.
+ *
+ * A certificate minted for one request has no business outliving the window in
+ * which its own proof is still considered fresh, and that window is
+ * popWindowMs + 2 * maxSkewMs. Set to exactly that.
+ */
+export const ONE_SHOT_MAX_TTL_MS = 2 * 60_000 + 2 * (5 * 60_000);
+
+/**
+ * How this endpoint expects its caller to have minted the certificate.
+ *
+ * `'cached'` is the ordinary path: one certificate per compartment, reused for
+ * up to an hour, addressed in the rate limiter by its own hash.
+ *
+ * `'one-shot'` is for the brokered compartments, where the client derives a
+ * fresh key per request from the HKDF root so that no long-lived medical or aid
+ * key is ever stored on the device.
+ */
+export type Admission = 'cached' | 'one-shot';
+
 export type CapCertPolicy = {
 	nowMs: number;
 	maxSkewMs?: number;
@@ -49,6 +74,8 @@ export type CapCertPolicy = {
 	maxTtlMs?: number;
 	/** Which compartment this endpoint serves. */
 	compartment: Compartment;
+	/** Defaults to 'cached'. */
+	admission?: Admission;
 };
 
 export type CredentialFailure =
@@ -62,6 +89,7 @@ export type CredentialFailure =
 	| 'cert-bad-signature'
 	| 'wrong-compartment'
 	| 'inactive-compartment'
+	| 'one-shot-required'
 	| 'pop-stale'
 	| 'pop-future'
 	| 'pop-bad-signature';
@@ -133,13 +161,34 @@ export async function verifyRequestCredential(
 
 	const maxSkewMs = policy.maxSkewMs ?? DEFAULT_POLICY.maxSkewMs;
 	const popWindowMs = policy.popWindowMs ?? DEFAULT_POLICY.popWindowMs;
-	const maxTtlMs = policy.maxTtlMs ?? DEFAULT_POLICY.maxTtlMs;
 	const now = policy.nowMs;
+	const admission: Admission = policy.admission ?? 'cached';
 
 	// Compartment before crypto: it is the cheapest check and the one whose
 	// failure means the client is confused rather than hostile.
 	if (cert.compartment !== policy.compartment) return fail('wrong-compartment');
 	if (!ACTIVE_COMPARTMENTS.includes(cert.compartment)) return fail('inactive-compartment');
+
+	// The brokered compartments are reachable only through an endpoint that asked
+	// for one-shot admission. Without this, adding `medical` and `aid` to
+	// ACTIVE_COMPARTMENTS would silently let a long-lived, hour-reusable
+	// certificate onto the broker, which is the linkability the one-shot design
+	// exists to remove.
+	//
+	// BE PRECISE ABOUT WHAT THIS PROVES. The server cannot tell a one-shot
+	// certificate from a cached one: both are ordinary self-issued cap-certs and
+	// which HKDF leaf minted the key is invisible on the wire. So this is not
+	// verification of one-shot-ness. It is a policy switch that says which
+	// endpoints may serve these compartments at all, plus the TTL clamp below,
+	// which bounds the cost of being wrong. The property that no long-lived key
+	// exists on the device is a client property kept by the client.
+	if (admission !== 'one-shot' && ONE_SHOT_ONLY_COMPARTMENTS.includes(cert.compartment))
+		return fail('one-shot-required');
+
+	const maxTtlMs =
+		admission === 'one-shot'
+			? Math.min(policy.maxTtlMs ?? ONE_SHOT_MAX_TTL_MS, ONE_SHOT_MAX_TTL_MS)
+			: (policy.maxTtlMs ?? DEFAULT_POLICY.maxTtlMs);
 
 	if (cert.expiresAtMs <= cert.issuedAtMs) return fail('cert-expired');
 	if (cert.expiresAtMs - cert.issuedAtMs > maxTtlMs) return fail('cert-ttl-too-long');
