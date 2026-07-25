@@ -60,7 +60,15 @@ export function fail(gate, problems) {
  * Rule of thumb: strip for "must not reference", scan for "must not contain".
  */
 export function stripComments(text) {
-	return text.replaceAll(/\/\*[\s\S]*?\*\//g, '').replaceAll(/(^|[^:])\/\/.*$/gm, '$1');
+	return (
+		text
+			.replaceAll(/\/\*[\s\S]*?\*\//g, '')
+			// Svelte templates carry HTML comments, and a template's own explanation of
+			// what it does NOT do is exactly what trips a "must not reference" rule.
+			// Missing this cost a fixture in gate-geo-granularity.
+			.replaceAll(/<!--[\s\S]*?-->/g, '')
+			.replaceAll(/(^|[^:])\/\/.*$/gm, '$1')
+	);
 }
 
 /**

@@ -19,6 +19,7 @@
 		"./broker": "./src/broker.ts",
 		"./medical": "./src/medical.ts",
 		"./capacity": "./src/capacity.ts",
+		"./liveboard": "./src/liveboard/index.ts",
 		"./reputation": "./src/reputation.ts"
 	},
 	"scripts": {
