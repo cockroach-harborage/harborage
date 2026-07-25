@@ -1,7 +1,13 @@
 # Deprivileged two-token pipeline (ARCHITECTURE §17.3).
-# Job `infra` is the ONLY holder of HB_TERRAFORM_TOKEN and runs no third-party
-# package code. Job `deploy` never receives that token: it reads IDs from state
-# with R2-scoped credentials and deploys with the scoped HB_DEPLOY_TOKEN.
+# Jobs `plan` and `apply` are the ONLY holders of HB_TERRAFORM_TOKEN and run no
+# third-party package code. Job `deploy` never receives that token: it reads IDs
+# from state with R2-scoped credentials and deploys with the scoped
+# HB_DEPLOY_TOKEN.
+#
+# plan (ungated) -> apply (approval) -> deploy (approval)
+# The plan is printed and machine-checked for destroys before anyone is asked
+# to approve anything; see the comment on the plan job for why it is not gated
+# and why the plan file is not passed between jobs.
 name: deploy
 
 on:
@@ -15,9 +21,111 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  infra:
-    name: infra (tofu plan + apply)
+  # Plan runs BEFORE the approval gate, on purpose.
+  #
+  # RUNBOOK says to read the plan before approving, but plan and apply used to
+  # be one step, so there was no moment between them: approving was a blind
+  # click on a job that had not run yet. Splitting them means the plan, and the
+  # destroy guard's verdict, are on screen before anyone approves anything.
+  #
+  # This job holds the Terraform token without an approval gate. That is a
+  # deliberate, bounded widening: `tofu plan` cannot mutate infrastructure, it
+  # runs no third-party package code (§17.3 is about which job can execute
+  # untrusted code, not about which job is gated), and it is the only way to
+  # produce something worth reviewing.
+  #
+  # The plan file is NOT passed as an artifact. It carries resource attributes
+  # in cleartext, and this repository is public, so an artifact would publish
+  # them. The apply job re-plans instead; `concurrency: deploy` serialises runs
+  # so nothing else moves state in between.
+  plan:
+    name: infra (tofu plan)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            registry.opentofu.org:443
+            get.opentofu.org:443
+            api.cloudflare.com:443
+            *.r2.cloudflarestorage.com:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+
+      - name: Render backend + tfvars
+        working-directory: infra
+        env:
+          CF_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+          ZONE_NAME: ${{ vars.ZONE_NAME }}
+          ADMIN_HANDLES: ${{ vars.ADMIN_HANDLES }}
+          IDP_GITHUB_CLIENT_ID: ${{ vars.IDP_GITHUB_CLIENT_ID }}
+        run: |
+          cat > backend.hcl <<EOF
+          bucket       = "harborage-tfstate"
+          key          = "harborage.tfstate"
+          region       = "auto"
+          endpoint     = "https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          use_lockfile = true
+          skip_credentials_validation = true
+          skip_region_validation      = true
+          skip_requesting_account_id  = true
+          skip_metadata_api_check     = true
+          skip_s3_checksum            = true
+          EOF
+          admin_emails=$(printf '%s' "$ADMIN_HANDLES" | awk -v RS=, '{gsub(/^[ \t]+|[ \t\n]+$/,""); if ($0!="") printf "\"%s\",", $0}')
+          cat > terraform.tfvars <<EOF
+          account_id   = "${CF_ACCOUNT_ID}"
+          zone_name    = "${ZONE_NAME}"
+          admin_emails = [${admin_emails%,}]
+          github_idp_client_id = "${IDP_GITHUB_CLIENT_ID}"
+          EOF
+
+      - name: Plan
+        working-directory: infra
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.HB_TERRAFORM_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
+          TF_VAR_github_idp_client_secret: ${{ secrets.TF_VAR_github_idp_client_secret }}
+        run: |
+          tofu init -backend-config=backend.hcl -input=false
+          tofu plan -input=false -out=plan.out
+          # Human-readable output is safe to print: github_idp_client_secret is
+          # declared sensitive, so tofu redacts it here. The BINARY plan is not
+          # safe and never leaves this runner.
+          tofu show -no-color plan.out | tee plan.txt
+          {
+            echo '## OpenTofu plan'
+            echo '```'
+            tail -c 60000 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          tofu show -json plan.out > plan.json
+
+      - name: Destroy guard
+        working-directory: infra
+        env:
+          # Set only for a deliberate, reviewed removal, and record why in
+          # RUNBOOK.md in the same PR.
+          HB_ALLOW_DESTROY: ${{ vars.HB_ALLOW_DESTROY }}
+        run: node ../tools/plan-guard/check-plan.mjs plan.json
+
+  apply:
+    name: infra (tofu apply)
+    runs-on: ubuntu-latest
+    needs: plan
     environment: production
     permissions:
       contents: read
@@ -70,22 +178,29 @@ jobs:
           github_idp_client_id = "${IDP_GITHUB_CLIENT_ID}"
           EOF
 
-      - name: Plan and apply
+      - name: Re-plan and apply
         working-directory: infra
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.HB_TERRAFORM_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_STATE_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_STATE_SECRET_ACCESS_KEY }}
           TF_VAR_github_idp_client_secret: ${{ secrets.TF_VAR_github_idp_client_secret }}
+          HB_ALLOW_DESTROY: ${{ vars.HB_ALLOW_DESTROY }}
         run: |
           tofu init -backend-config=backend.hcl -input=false
           tofu plan -input=false -out=plan.out
+          # The guard runs again here. The reviewed plan cannot be handed over
+          # from the plan job (it would have to become a public artifact), so
+          # this re-plan is what actually gets applied — and it must clear the
+          # same bar. If state moved between the two, this is where it is caught.
+          tofu show -json plan.out > plan.json
+          node ../tools/plan-guard/check-plan.mjs plan.json
           tofu apply -input=false plan.out
 
   deploy:
     name: deploy (wrangler)
     runs-on: ubuntu-latest
-    needs: infra
+    needs: apply
     environment: production
     permissions:
       contents: read

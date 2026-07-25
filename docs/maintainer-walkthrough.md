@@ -220,12 +220,20 @@ I will tell you which slice needs this, one PR ahead.
 
 ### 2.4 Every production deploy
 
-Actions → the run → **Review deployments** → `production` → Approve. Both the
-`infra` and `deploy` jobs pause separately.
+Actions → the run → **Review deployments** → `production` → Approve. The
+`apply` and `deploy` jobs pause separately.
 
-Read the `tofu plan` output in the `infra` job before approving. A destroy on
-Email records, the Access application, or signing-key config is a **bug** — stop
-and tell me rather than approving.
+The `infra (tofu plan)` job runs **before** either gate, so by the time you are
+asked to approve, the plan is already on screen: open that job, or read the run
+summary, which carries the same output. Plan and apply used to be one step,
+which meant approving before anything had run.
+
+A destroy on Email records, the Access application, or signing-key config is a
+**bug**. You no longer have to catch it by eye: the **Destroy guard** step fails
+the plan job on *any* destroy or replace, including the SPF and DMARC records
+that `prevent_destroy` does not cover. If it fails, nothing has been applied.
+A genuinely intended removal needs the repository variable `HB_ALLOW_DESTROY`
+set to the exact resource addresses, and a line in RUNBOOK.md saying why.
 
 ---
 
