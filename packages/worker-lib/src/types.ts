@@ -33,6 +33,12 @@ export interface ConsoleEnv extends FlagBindings {
 	FLAG_STATE: DurableObjectNamespace;
 	/** Append-only official-notice hash-chain writer (mirrors to D1). M1. */
 	NOTICE_LOG: DurableObjectNamespace;
+	/**
+	 * Naming Review gate state machine (§8.2). M5, and unreachable at rest: the
+	 * operator surface is not built and accountability_naming is LOCKED with no
+	 * FLAG_NAMES entry, so no Worker code that consults it typechecks.
+	 */
+	REVIEW_GATE: DurableObjectNamespace;
 	/** Access application AUD tag (wrangler secret). Empty ⇒ every request is denied. */
 	ACCESS_AUD: string;
 	/** Access team domain, e.g. "example.cloudflareaccess.com" (wrangler var). */
