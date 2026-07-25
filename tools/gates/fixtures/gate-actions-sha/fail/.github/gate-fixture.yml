@@ -1,0 +1,14 @@
+# Fixture for gate-actions-sha. Deliberately NOT under .github/workflows/:
+# zizmor collects that exact path and would flag the unpinned ref in the
+# fail tree as a real finding on this repo. The gate walks all of .github
+# for .yml, so this exercises it identically.
+name: fixture
+on: push
+permissions: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
