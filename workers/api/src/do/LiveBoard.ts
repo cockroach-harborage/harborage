@@ -90,7 +90,6 @@ export class LiveBoard extends DurableObject {
 	private epochIndex = -1;
 	private salt = new Uint8Array(32);
 	private prevSalt: Uint8Array | null = null;
-	private rotatedAtMs = 0;
 
 	private density = newSketch();
 	private prevDensity: Uint8Array | null = null;
@@ -157,7 +156,9 @@ export class LiveBoard extends DurableObject {
 	 * through the publication delay window, which is the whole reason the read
 	 * path is a long poll rather than a socket.
 	 */
-	async view(opts: { sinceTick?: number; waitMs?: number; nowMs?: number } = {}): Promise<BoardView> {
+	async view(
+		opts: { sinceTick?: number; waitMs?: number; nowMs?: number } = {}
+	): Promise<BoardView> {
 		const nowMs = opts.nowMs ?? Date.now();
 		await this.rotateIfDue(nowMs);
 		this.expire(nowMs);
@@ -175,9 +176,28 @@ export class LiveBoard extends DurableObject {
 		});
 	}
 
+	/**
+	 * The density lower bound the floor consumes, current epoch combined with the
+	 * overlap.
+	 *
+	 * ONE COPY, and it is deliberately the only one. compose() and the test
+	 * accessor both call it, because they used to each carry their own
+	 * `Math.max(...)` and the sabotage that changed one to a SUM left the test
+	 * green: the test was reading a different line than the read path used. Same
+	 * class of bug gate-geo-granularity check 4 forbids for the density floor
+	 * constant, for the same reason.
+	 *
+	 * max(), never sum: summing would double-count a reporter who reported on both
+	 * sides of an epoch boundary, and inflation is the direction that pushes a
+	 * small group over the floor.
+	 */
+	private combinedDensityLcb(): number {
+		return Math.max(lowerBound(this.density), this.prevDensityLcb());
+	}
+
 	/** Compose what a reader may see. Never a count, never a coordinate. */
 	private compose(nowMs: number, heightened = false): BoardView {
-		const densityLcb = Math.max(lowerBound(this.density), this.prevDensityLcb());
+		const densityLcb = this.combinedDensityLcb();
 		const signals: BoardSignal[] = [];
 
 		for (const [signal, state] of this.signals) {
@@ -254,10 +274,24 @@ export class LiveBoard extends DurableObject {
 		const epoch = Math.floor(nowMs / DEDUP_EPOCH_MS);
 		if (epoch === this.epochIndex) return;
 
-		this.prevSalt = this.epochIndex === -1 ? null : this.salt;
-		this.prevDensity = this.epochIndex === -1 ? null : this.density;
+		// CARRY FORWARD ONLY FROM THE IMMEDIATELY PRECEDING EPOCH.
+		//
+		// The overlap exists so a continuously-reported zone does not go dark and
+		// strobe back at every fifteen-minute boundary. If epochs were SKIPPED,
+		// there is no continuity to preserve: nobody reported in between, and the
+		// sketch being carried is an hour old. Keeping it would let stale reporters
+		// inflate the density floor and publish a group that had long since
+		// dispersed, and inflation is the unsafe direction.
+		//
+		// Two versions of this were wrong before the test caught it: keyed to when
+		// rotation was OBSERVED (so a quiet board handed the old sketch a fresh
+		// lease on every wake), then keyed to the boundary but still carrying across
+		// a four-epoch gap.
+		const contiguous = this.epochIndex !== -1 && epoch === this.epochIndex + 1;
+		this.prevSalt = contiguous ? this.salt : null;
+		this.prevDensity = contiguous ? this.density : null;
 		for (const state of this.signals.values()) {
-			state.prevSketch = this.epochIndex === -1 ? null : state.sketch;
+			state.prevSketch = contiguous ? state.sketch : null;
 			state.sketch = newSketch();
 		}
 
@@ -265,7 +299,6 @@ export class LiveBoard extends DurableObject {
 		crypto.getRandomValues(this.salt);
 		this.density = newSketch();
 		this.epochIndex = epoch;
-		this.rotatedAtMs = nowMs;
 
 		// The jitter is derived from the salt, so it moves with the epoch. Rederive
 		// once here rather than per read, or the delay becomes a per-poll coin flip
@@ -275,9 +308,22 @@ export class LiveBoard extends DurableObject {
 		}
 	}
 
-	/** Lazy expiry, at the top of every method. No alarm exists to do it. */
+	/**
+	 * Lazy expiry, at the top of every method. No alarm exists to do it.
+	 *
+	 * THE OVERLAP IS MEASURED FROM THE EPOCH BOUNDARY, not from when rotation was
+	 * observed, and the difference is a safety bug rather than a nicety. Rotation
+	 * is lazy, so on a board nobody touches for an hour it happens on the next
+	 * call and `rotatedAtMs` becomes that moment. Keyed to that, the previous
+	 * epoch's sketch would get a fresh 90-second lease every time the board woke,
+	 * so hour-old reporters would keep inflating the density floor and could
+	 * publish a group that had long since dispersed. Inflation is the unsafe
+	 * direction. Keyed to the boundary, a long gap drops the old sketch on the
+	 * first touch and the overlap only ever helps a genuinely continuous board.
+	 */
 	private expire(nowMs: number): void {
-		if (this.prevDensity && nowMs - this.rotatedAtMs > EPOCH_OVERLAP_MS) {
+		const boundaryMs = this.epochIndex * DEDUP_EPOCH_MS;
+		if (this.prevDensity && nowMs - boundaryMs > EPOCH_OVERLAP_MS) {
 			this.prevDensity = null;
 			this.prevSalt = null;
 			for (const state of this.signals.values()) state.prevSketch = null;
@@ -309,7 +355,7 @@ export class LiveBoard extends DurableObject {
 	async densityForTest(nowMs = Date.now()): Promise<number> {
 		await this.rotateIfDue(nowMs);
 		this.expire(nowMs);
-		return Math.max(lowerBound(this.density), this.prevDensityLcb());
+		return this.combinedDensityLcb();
 	}
 
 	/** Occupied registers, for tests only. Never reachable from a route. */
