@@ -12,6 +12,7 @@
  */
 import { newContentKey, seal } from '@harborage/crypto';
 import { frameEnvelope } from '@harborage/worker-lib/envelope';
+import { credentialHeaders } from '$lib/credential';
 import {
 	BlobCipherSource,
 	MultipartUploader,
@@ -135,10 +136,19 @@ export async function sendRecord(
 
 	const register = {
 		async register(): Promise<string> {
+			const envelope = metadataEnvelope(record);
+			// The proof of possession binds to these exact bytes, so build it from
+			// the envelope we are about to send rather than from anything derived.
+			const credential = await credentialHeaders(
+				'document',
+				'POST',
+				'/api/incidents/register',
+				envelope
+			);
 			const res = await fetchFn('/api/incidents/register', {
 				method: 'POST',
-				headers: { 'content-type': 'application/octet-stream' },
-				body: new Blob([metadataEnvelope(record) as BlobPart])
+				headers: { 'content-type': 'application/octet-stream', ...credential },
+				body: new Blob([envelope as BlobPart])
 			});
 			if (res.status === 403) throw new NotOpenError();
 			if (!res.ok) throw new TransportError('retryable', `register ${res.status}`);

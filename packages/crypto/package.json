@@ -5,14 +5,16 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
+		"./canary": "./src/canary.ts",
+		"./cap-cert": "./src/cap-cert.ts",
 		"./compartments": "./src/compartments.ts",
 		"./device-keys": "./src/device-keys.ts",
 		"./hkdf-tree": "./src/hkdf-tree.ts",
-		"./mnemonic": "./src/mnemonic.ts",
 		"./minisign": "./src/minisign.ts",
-		"./pack": "./src/pack.ts",
+		"./mnemonic": "./src/mnemonic.ts",
 		"./notice": "./src/notice.ts",
-		"./canary": "./src/canary.ts",
+		"./pack": "./src/pack.ts",
+		"./signature": "./src/signature.ts",
 		"./sodium": "./src/sodium.ts"
 	},
 	"scripts": {

@@ -298,37 +298,8 @@ export async function signWithDeviceKey(
 }
 
 /**
- * Verify a device signature. Used by the tests and by any client-side check;
- * the Worker has its own no-DOM path.
+ * Verify a device signature. Re-exported from signature.ts so the browser and
+ * the Worker verify through exactly one implementation; the Worker cannot
+ * import this file, because the WebCrypto reach above fails Workers typecheck.
  */
-export function verifyDeviceSignature(
-	algId: SigningAlgId,
-	publicKey: Uint8Array,
-	signature: Uint8Array,
-	context: SigContext,
-	message: Uint8Array
-): boolean {
-	const framed = domainSeparate(context, message);
-	try {
-		if (algId === SIGNING_ALG.ed25519) return ed25519.verify(signature, framed, publicKey);
-		// Both options are load-bearing and both defaults are wrong for us:
-		//
-		// prehash:false — noble defaults to prehash:true, meaning it hashes the
-		//   argument for you. WebCrypto already signed SHA-256(framed), so we
-		//   pass that digest and must tell noble not to hash it again.
-		//
-		// lowS:false — noble defaults to rejecting high-S signatures, and
-		//   WebCrypto does not normalise S. About half of every genuine
-		//   signature from our own P-256 tier has high S, so the default would
-		//   reject them at random. Malleability matters where a signature is an
-		//   identifier; here replay is bound by the PoP nonce, not by signature
-		//   bytes, so accepting both forms of S costs nothing.
-		//
-		// Left at the defaults this fails ~50% of the time, only on the phones
-		// that need the fallback tier. The loop in device-keys.test.ts is what
-		// catches it; a single-shot test passes by coin flip.
-		return p256.verify(signature, sha256(framed), publicKey, { prehash: false, lowS: false });
-	} catch {
-		return false;
-	}
-}
+export { verifyContextSignature as verifyDeviceSignature } from './signature.ts';
