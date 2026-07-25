@@ -10,9 +10,10 @@
  * the sealed register body) is finalized with the identity core; here the body
  * is sealed + framed only to satisfy the structural sealed-envelope check.
  */
-import { newContentKey, seal } from '@harborage/crypto';
-import { frameEnvelope } from '@harborage/worker-lib/envelope';
+import { NONCE_LENGTH as SEALED_BOX_NONCE_LENGTH, sealTo } from '@harborage/crypto/sealed-box';
+import { ALG_SEALED_BOX_X25519, frameEnvelope } from '@harborage/worker-lib/envelope';
 import { credentialHeaders } from '$lib/credential';
+import { resolveIntakeKey } from '$lib/intake-key';
 import {
 	BlobCipherSource,
 	MultipartUploader,
@@ -30,20 +31,29 @@ import type { LocalDocument } from '$lib/documents';
 export interface IntakeStatus {
 	document_intake: boolean;
 	directory_intake: boolean;
+	/** Hex public half of the intake sealed-box keypair, or null if unpublished. */
+	intake_key: string | null;
 }
+
+const INTAKE_CLOSED: IntakeStatus = {
+	document_intake: false,
+	directory_intake: false,
+	intake_key: null
+};
 
 /** Read the public feature-flag booleans; default OFF (offline / error / flag off). */
 export async function getIntakeStatus(fetchFn: typeof fetch = fetch): Promise<IntakeStatus> {
 	try {
 		const res = await fetchFn('/api/intake/status');
-		if (!res.ok) return { document_intake: false, directory_intake: false };
+		if (!res.ok) return INTAKE_CLOSED;
 		const data = (await res.json()) as Partial<IntakeStatus>;
 		return {
 			document_intake: data.document_intake === true,
-			directory_intake: data.directory_intake === true
+			directory_intake: data.directory_intake === true,
+			intake_key: typeof data.intake_key === 'string' ? data.intake_key : null
 		};
 	} catch {
-		return { document_intake: false, directory_intake: false };
+		return INTAKE_CLOSED;
 	}
 }
 
@@ -103,7 +113,19 @@ class R2PartTransport implements PartTransport {
 	}
 }
 
-function metadataEnvelope(record: LocalDocument): Uint8Array {
+/**
+ * Seal the register metadata to the intake public key.
+ *
+ * The previous version minted a content key, sealed with it, and dropped it on
+ * the floor, so every register body ever sent would have been permanently
+ * undecryptable by anyone including us. It satisfied the structural
+ * sealed-envelope check and nothing else.
+ *
+ * SEALED-TO-PLATFORM, not end-to-end: this body is destined for the public
+ * incident record, so the consumer must be able to read it. It buys hop
+ * confidentiality and blast-radius hardening, and nothing against compulsion.
+ */
+function metadataEnvelope(record: LocalDocument, intakeKey: Uint8Array): Uint8Array {
 	const meta = {
 		type: record.type,
 		note: record.note,
@@ -114,8 +136,21 @@ function metadataEnvelope(record: LocalDocument): Uint8Array {
 		derivative_sha256: record.derivative?.sha256,
 		redaction_confirmed: record.redactionConfirmed
 	};
-	const key = newContentKey();
-	return frameEnvelope(seal(key, new TextEncoder().encode(JSON.stringify(meta))));
+	// Fresh ephemeral seed AND nonce per envelope. Reusing the seed across two
+	// messages to the same recipient repeats the content key, which loses
+	// confidentiality for both.
+	const ephemeralSeed = new Uint8Array(32);
+	const nonce = new Uint8Array(SEALED_BOX_NONCE_LENGTH);
+	crypto.getRandomValues(ephemeralSeed);
+	crypto.getRandomValues(nonce);
+	const boxed = sealTo(
+		intakeKey,
+		new TextEncoder().encode(JSON.stringify(meta)),
+		ephemeralSeed,
+		nonce
+	);
+	ephemeralSeed.fill(0);
+	return frameEnvelope(boxed, ALG_SEALED_BOX_X25519);
 }
 
 export type SendOutcome = 'sent' | 'not_open' | 'failed';
@@ -134,9 +169,16 @@ export async function sendRecord(
 	const transport = new R2PartTransport(fetchFn);
 	const uploader = new MultipartUploader(store, media, transport);
 
+	const status = await getIntakeStatus(fetchFn);
+	const intake = await resolveIntakeKey(status.intake_key);
+	// No key published, or a key that changed since we pinned it: refuse rather
+	// than seal to something unverified. Sending to a swapped key would hand the
+	// note to whoever swapped it.
+	if (intake.status !== 'ok') return 'not_open';
+
 	const register = {
 		async register(): Promise<string> {
-			const envelope = metadataEnvelope(record);
+			const envelope = metadataEnvelope(record, intake.publicKey);
 			// The proof of possession binds to these exact bytes, so build it from
 			// the envelope we are about to send rather than from anything derived.
 			const credential = await credentialHeaders(

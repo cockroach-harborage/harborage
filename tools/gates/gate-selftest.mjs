@@ -46,9 +46,16 @@ for (const gate of gates) {
 	const name = gate.replace(/\.mjs$/, '');
 	const dir = join(here, 'fixtures', name);
 	const passDir = join(dir, 'pass');
-	const failDir = join(dir, 'fail');
+	// A gate with several distinct checks gets several fail trees: fail/,
+	// fail-<reason>/. One shared fail fixture would only ever prove whichever
+	// check happens to fire first, leaving the rest unexercised.
+	const failDirs = existsSync(dir)
+		? readdirSync(dir)
+				.filter((d) => d === 'fail' || d.startsWith('fail-'))
+				.map((d) => join(dir, d))
+		: [];
 
-	if (!existsSync(passDir) || !existsSync(failDir)) {
+	if (!existsSync(passDir) || failDirs.length === 0) {
 		problems.push(
 			`${name}: missing fixtures — create tools/gates/fixtures/${name}/{pass,fail}/ so the gate is proven able to fail`
 		);
@@ -62,11 +69,13 @@ for (const gate of gates) {
 		);
 	}
 
-	const bad = runAgainst(gate, failDir);
-	if (bad.status === 0) {
-		problems.push(
-			`${name}: ACCEPTED its FAIL fixture. The gate cannot detect the very thing it exists to catch.`
-		);
+	for (const failDir of failDirs) {
+		const bad = runAgainst(gate, failDir);
+		if (bad.status === 0) {
+			problems.push(
+				`${name}: ACCEPTED the fixture in ${failDir.slice(failDir.lastIndexOf('/') + 1)}/. The gate cannot detect the very thing it exists to catch.`
+			);
+		}
 	}
 	checked++;
 }

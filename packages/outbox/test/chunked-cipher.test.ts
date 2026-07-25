@@ -4,6 +4,7 @@ import {
 	BytesCipherSource,
 	CHUNK_PLAIN,
 	SEAL_OVERHEAD,
+	openChunks,
 	chunkAad,
 	concatChunks,
 	sealChunks
@@ -78,5 +79,62 @@ describe('part-aligned chunked seal', () => {
 		expect(eq(open(key, part1, chunkAad(fileBase, 1, 2, true)), plain.subarray(CHUNK_PLAIN))).toBe(
 			true
 		);
+	});
+});
+
+describe('openChunks', () => {
+	const key = new Uint8Array(32).fill(2);
+	const fileBase = new Uint8Array(32).fill(8);
+	const plain = new Uint8Array(1000).map((_, i) => i % 251);
+	const CP = 100; // small chunkPlain so alignment is provable without a 5 MiB seal
+
+	function sealed(p = plain, base = fileBase) {
+		return concatChunks(sealChunks(key, p, base, CP));
+	}
+
+	it('round-trips a multi-chunk blob', () => {
+		expect(openChunks(key, sealed(), fileBase, CP)).toEqual(plain);
+	});
+
+	it('round-trips a single short chunk and an exact multiple', () => {
+		const short = new Uint8Array(7).fill(1);
+		expect(openChunks(key, sealed(short), fileBase, CP)).toEqual(short);
+		const exact = new Uint8Array(CP * 3).fill(4);
+		expect(openChunks(key, sealed(exact), fileBase, CP)).toEqual(exact);
+	});
+
+	// The reason total is derived rather than passed in. If a caller supplied
+	// total, an attacker who dropped trailing chunks could lower it to match and
+	// every remaining chunk would still authenticate against its AAD.
+	it('detects truncation', () => {
+		const cipher = sealed();
+		const oneChunkShort = cipher.subarray(0, cipher.length - (CP + SEAL_OVERHEAD));
+		expect(openChunks(key, oneChunkShort, fileBase, CP)).toBeNull();
+		expect(openChunks(key, cipher.subarray(0, cipher.length - 1), fileBase, CP)).toBeNull();
+	});
+
+	it('detects reordering and splicing between files', () => {
+		const chunks = sealChunks(key, plain, fileBase, CP);
+		const swapped = concatChunks([chunks[1]!, chunks[0]!, ...chunks.slice(2)]);
+		expect(openChunks(key, swapped, fileBase, CP)).toBeNull();
+
+		// A chunk lifted from a different file has a different fileBase in its AAD.
+		const other = sealChunks(key, plain, new Uint8Array(32).fill(9), CP);
+		const spliced = concatChunks([chunks[0]!, other[1]!, ...chunks.slice(2)]);
+		expect(openChunks(key, spliced, fileBase, CP)).toBeNull();
+	});
+
+	it('rejects the wrong key, the wrong fileBase, and tampering', () => {
+		const cipher = sealed();
+		expect(openChunks(new Uint8Array(32).fill(3), cipher, fileBase, CP)).toBeNull();
+		expect(openChunks(key, cipher, new Uint8Array(32).fill(9), CP)).toBeNull();
+		const tampered = cipher.slice();
+		tampered[50] = (tampered[50] ?? 0) ^ 0xff;
+		expect(openChunks(key, tampered, fileBase, CP)).toBeNull();
+	});
+
+	it('rejects blobs too short to be even one chunk', () => {
+		expect(openChunks(key, new Uint8Array(0), fileBase, CP)).toBeNull();
+		expect(openChunks(key, new Uint8Array(SEAL_OVERHEAD), fileBase, CP)).toBeNull();
 	});
 });

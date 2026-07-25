@@ -41,6 +41,18 @@ const testFiles = [];
 for (const file of walk(join(repoRoot, 'workers'))) {
 	if (/sealed-body\.(test|spec)\.ts$/.test(file)) testFiles.push(file);
 }
+/** Where bindings are actually declared: wrangler configs + the shared Env contract. */
+function bindingFiles() {
+	const files = [];
+	for (const top of ['workers', 'apps', 'packages']) {
+		for (const file of walk(join(repoRoot, top))) {
+			if (/wrangler\.jsonc$/.test(file) || /worker-lib\/src\/types\.ts$/.test(file))
+				files.push(file);
+		}
+	}
+	return files;
+}
+
 let routerText = '';
 for (const file of walk(join(repoRoot, 'workers'))) {
 	if (/\.ts$/.test(file) && !/\.(test|spec)\.ts$/.test(file)) routerText += read(file);
@@ -96,14 +108,7 @@ for (const raw of entries) {
 	// which is where bindings are actually declared — checking only workers/ would
 	// miss the one file that names every secret.
 	if (cls === 'SEALED-E2E') {
-		const bindingFiles = [];
-		for (const top of ['workers', 'apps', 'packages']) {
-			for (const file of walk(join(repoRoot, top))) {
-				if (/wrangler\.jsonc$/.test(file) || /worker-lib\/src\/types\.ts$/.test(file))
-					bindingFiles.push(file);
-			}
-		}
-		for (const file of bindingFiles) {
+		for (const file of bindingFiles()) {
 			const m = read(file).match(UNSEAL_SECRET_RE);
 			if (m) {
 				problems.push(
@@ -111,6 +116,49 @@ for (const raw of entries) {
 				);
 			}
 		}
+	}
+}
+
+// A SEALED-TO-PLATFORM body is opened by SOME key, and that key must be named
+// and justified here rather than hidden behind a binding name picked to slip
+// past UNSEAL_SECRET_RE. Without this, the check above stays green while the
+// property it guards quietly stops holding — and the moment M3 adds the first
+// SEALED-E2E endpoint it would start firing on a key nobody wrote down.
+const declared = new Map();
+for (const raw of entries) {
+	const key = raw?.platform_key;
+	if (!key) continue;
+	if (!key.binding || !key.why || String(key.why).trim().length < 40) {
+		problems.push(
+			`${raw.endpoint}: platform_key needs a "binding" and a substantive "why" naming who holds it and why nothing else may`
+		);
+		continue;
+	}
+	if (raw.class === 'SEALED-E2E') {
+		problems.push(`${raw.endpoint}: a SEALED-E2E endpoint cannot declare a platform_key`);
+		continue;
+	}
+	declared.set(key.binding, raw.endpoint);
+}
+
+// Every unseal-shaped binding that exists must be one of the declared ones.
+for (const file of bindingFiles()) {
+	for (const m of read(file).matchAll(new RegExp(UNSEAL_SECRET_RE.source, 'g'))) {
+		const binding = m[1];
+		if (!declared.has(binding)) {
+			problems.push(
+				`${relative(repoRoot, file)} declares ${binding}, which is not registered as a platform_key in sensitive-endpoints.json. Register it with a justification, or it should not exist.`
+			);
+		}
+	}
+}
+
+// A declared key that no longer exists anywhere is a stale claim about custody.
+for (const [binding, endpoint] of declared) {
+	if (!bindingFiles().some((f) => read(f).includes(binding))) {
+		problems.push(
+			`${endpoint}: platform_key ${binding} is declared but no binding by that name exists; drop the claim or restore the binding`
+		);
 	}
 }
 

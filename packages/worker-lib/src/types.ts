@@ -53,6 +53,13 @@ export interface ApiEnv extends FlagBindings {
 	KEYDIR_CACHE: KVNamespace;
 	/** Turnstile secret (wrangler secret, set at intake switch-on). Empty ⇒ verify fails closed. */
 	TURNSTILE_SECRET?: string;
+	/**
+	 * PUBLIC half of the intake sealed-box keypair, hex. Served from
+	 * /api/intake/status so a client can seal the metadata envelope to it. It is
+	 * a public key, so a var rather than a secret. Absent ⇒ status reports no
+	 * key and the client refuses to send (fail-closed).
+	 */
+	INTAKE_PUBLIC_KEY?: string;
 }
 
 /** workers/media — M1 */
@@ -77,4 +84,16 @@ export interface MediaEnv extends FlagBindings {
 export interface ConsumerEnv extends FlagBindings {
 	DB: D1Database;
 	VERIFICATION_STATE: DurableObjectNamespace;
+	/**
+	 * PRIVATE half of the intake sealed-box keypair. A wrangler secret on the
+	 * consumer ONLY — never on api, web or console.
+	 *
+	 * Its existence is the honest admission that the incident metadata envelope
+	 * is SEALED-TO-PLATFORM and not end-to-end: that body is destined for the
+	 * public incident record, so the consumer must read it. gate-sealed-body
+	 * requires this binding to be declared and justified in
+	 * tools/gates/sensitive-endpoints.json, and forbids any such binding
+	 * existing alongside a SEALED-E2E endpoint.
+	 */
+	INTAKE_PRIVATE_KEY?: string;
 }
