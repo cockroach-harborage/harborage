@@ -32,6 +32,8 @@
 		"@harborage/crypto": "workspace:*"
 	},
 	"devDependencies": {
-		"vitest": "^4.1.10"
+		"vitest": "^4.1.10",
+		"@noble/curves": "^2.2.0",
+		"@scure/base": "^2.2.0"
 	}
 }

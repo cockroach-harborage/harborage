@@ -16,3 +16,4 @@ export * from './types.ts';
 export * from './hll.ts';
 export * from './bands.ts';
 export * from './publish.ts';
+export * from './zone.ts';
