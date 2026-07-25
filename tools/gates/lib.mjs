@@ -1,9 +1,17 @@
 // Shared helpers for gate scripts.
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+// Normally the repo. HARBORAGE_GATE_ROOT retargets every gate at a fixture tree
+// so gate-selftest.mjs can prove each gate actually FAILS on a broken input.
+// Without it no gate here had ever been shown to fail, and this repo has already
+// shipped two that could not (see gate-sealed-body.mjs). The override is a
+// test-harness affordance only: nothing in CI or the deploy path sets it, and
+// every gate still reads the real repo when it is unset.
+export const repoRoot = process.env.HARBORAGE_GATE_ROOT
+	? resolve(process.env.HARBORAGE_GATE_ROOT)
+	: fileURLToPath(new URL('../..', import.meta.url));
 
 const SKIP_DIRS = new Set([
 	'node_modules',

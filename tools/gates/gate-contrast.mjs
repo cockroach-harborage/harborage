@@ -2,8 +2,10 @@
 // Text-role pairs must reach 4.5:1; UI/large-role pairs 3:1, in both themes.
 // If this fails, change the token (and PRD §15 in the same commit), not the gate.
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { repoRoot } from './lib.mjs';
 
-const css = readFileSync(new URL('../../packages/foundry/tokens.css', import.meta.url), 'utf8');
+const css = readFileSync(join(repoRoot, 'packages/foundry/tokens.css'), 'utf8');
 
 function themeVars(block) {
 	const vars = {};
