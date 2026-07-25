@@ -60,7 +60,10 @@ export const FLIPPABLE = [
 	'live_board',
 	// Crowd bands only, separate so they can be dropped without closing the
 	// hazard board. Disabled entirely under heightened threat.
-	'crowd_bands'
+	'crowd_bands',
+	// The public institutional accountability surface. Reversible: switching it off
+	// hides published records, it does not unpublish or delete them.
+	'accountability_records'
 ] as const;
 
 /** Irreversible high-harm gates: built, but permanently OFF at this milestone. */
@@ -68,7 +71,19 @@ export const LOCKED = [
 	'accountability_naming',
 	'evidence_unredaction',
 	'precise_location_reveal',
-	'permanent_delete'
+	'permanent_delete',
+	// Detainee and incommunicado tracking. LOCKED HERE ONLY, and deliberately
+	// absent from FLAG_NAMES: a locked gate must have no runtime read path at all,
+	// so flagEnabled(kv, 'detainee_intake') does not typecheck and the route cannot
+	// be written to consult it. The console lists them so an operator can SEE they
+	// exist and are locked, which is the only reason a name appears here.
+	//
+	// Both are counsel-gated beyond the flag (§8.3: whether any detainee field may
+	// transit the platform even transiently), and incommunicado additionally needs
+	// two authenticated legal-compartment triggers plus a legal_broker role
+	// signature from a key_directory that ships empty.
+	'detainee_intake',
+	'incommunicado_alert'
 ] as const;
 
 export type FlippableFlag = (typeof FLIPPABLE)[number];
