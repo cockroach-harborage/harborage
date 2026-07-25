@@ -25,7 +25,16 @@ export const FLIPPABLE = [
 	// switch-on additionally waits on blind-token-carried reputation so the
 	// server holds no per-compartment list at all (§4.3).
 	'community_corroborate',
-	'archive_anchoring'
+	'archive_anchoring',
+	// The permanent public archive. Off means admission never promotes past
+	// SEALED_ONLY, no derivative is published, and the §63 export surface is
+	// closed. Switch-on additionally waits on counsel signing off the certificate
+	// form and the probation window length, neither of which a flag can supply.
+	'archive_publish',
+	// Fingerprint-and-reference of off-platform media. Built with no fetch path
+	// at all, so flipping this stores a content id and a client fingerprint and
+	// nothing else. Re-hosting is a separate, counsel-gated decision.
+	'source_import'
 ] as const;
 
 /** Irreversible high-harm gates: built, but permanently OFF at this milestone. */

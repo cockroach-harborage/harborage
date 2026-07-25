@@ -14,6 +14,7 @@
 		"./cap-cert": "./src/cap-cert.ts",
 		"./ratelimit": "./src/ratelimit.ts",
 		"./verification": "./src/verification/machine.ts",
+		"./archive": "./src/archive/index.ts",
 		"./reputation": "./src/reputation.ts"
 	},
 	"scripts": {
