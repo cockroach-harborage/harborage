@@ -3,7 +3,8 @@
 		{
 			"endpoint": "POST /api/things/register",
 			"class": "SEALED-TO-PLATFORM",
-			"note": "Fixture endpoint for gate-selftest.",
+			"sealed_object": "thing-metadata-envelope",
+			"note": "Fixture endpoint for gate-selftest. Broken invariant: the key is named but not justified.",
 			"platform_key": {
 				"binding": "INTAKE_PRIVATE_KEY",
 				"why": "needed"

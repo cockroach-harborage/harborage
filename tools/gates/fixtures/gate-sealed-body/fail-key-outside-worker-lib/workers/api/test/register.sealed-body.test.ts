@@ -1,4 +1,4 @@
-// Covers POST /api/things/register and POST /api/things/keyring.
+// Covers POST /api/things/register.
 import { describe, expect, it } from 'vitest';
 
 describe('register', () => {
