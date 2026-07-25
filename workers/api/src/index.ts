@@ -12,6 +12,7 @@ export { RateLimit } from './do/RateLimit.ts';
 export { VerificationState } from './do/VerificationState.ts';
 export { SpendCap } from './do/SpendCap.ts';
 export { ReReviewQueue } from './do/ReReviewQueue.ts';
+export { CustodyChain } from './do/CustodyChain.ts';
 
 export default {
 	fetch: (req: Request, env: ApiEnv, ctx: ExecutionContext) => app.fetch(req, env, ctx),
