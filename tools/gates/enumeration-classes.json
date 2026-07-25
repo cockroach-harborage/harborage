@@ -1,0 +1,36 @@
+{
+	"comment": "Every D1 table, classified by whether it may be enumerated. There is no default: an unclassified table fails, because deciding on the author's behalf is how a registry-shaped table slides in unnoticed. Listing a table here is a reviewed decision, not a bypass, exactly as gate-memory-only's SQLITE_OK is.",
+	"registry_comment": "Count-only tables. NO route may SELECT from one, at all: the only reader is a Cron materializer. That is stronger than 'must be limited', because a limit is a number someone raises. A registry table holds nothing from which a person could be reached, and the way it stays that way is that nothing can ask it about a person.",
+	"registry": ["skills_registry"],
+	"materialized_comment": "Public rollups built by Cron from a registry table. A band, never a count: 'two lawyers in this district' is a number small enough to act on, and it tells an adversary how thin the support is. Every column must be TEXT outside the integer allowlist, and the band vocabulary is pinned so it cannot silently gain a numeric-looking value.",
+	"materialized": {
+		"capacity_bands": {
+			"band_column": "band",
+			"band_values": ["NONE", "SOME", "MANY"],
+			"integer_allowlist": ["pack_epoch"]
+		}
+	},
+	"ordinary_comment": "Everything else: public-plaintext or already covered by another gate. Enumerating one of these is not a safety problem, so this gate says nothing about them beyond requiring that somebody classified them.",
+	"ordinary": [
+		"feature_flag_audit",
+		"incidents",
+		"evidence_refs",
+		"resource_entries",
+		"incident_public_index",
+		"notices",
+		"notice_chain",
+		"key_directory",
+		"revocation_list",
+		"verification_states",
+		"reputation_scalars",
+		"mod_audit",
+		"corroborations",
+		"review_approvals",
+		"evidence_keyrings",
+		"perceptual_hashes",
+		"archive_items",
+		"archive_provenance",
+		"archive_disputes",
+		"archive_source_refs"
+	]
+}

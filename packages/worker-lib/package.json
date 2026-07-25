@@ -18,6 +18,7 @@
 		"./onion": "./src/onion.ts",
 		"./broker": "./src/broker.ts",
 		"./medical": "./src/medical.ts",
+		"./capacity": "./src/capacity.ts",
 		"./reputation": "./src/reputation.ts"
 	},
 	"scripts": {

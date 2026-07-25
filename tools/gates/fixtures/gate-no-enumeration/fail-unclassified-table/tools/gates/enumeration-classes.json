@@ -1,0 +1,11 @@
+{
+	"registry": ["helper_offers"],
+	"materialized": {
+		"help_bands": {
+			"band_column": "band",
+			"band_values": ["NONE", "SOME", "MANY"],
+			"integer_allowlist": ["pack_epoch"]
+		}
+	},
+	"ordinary": []
+}
