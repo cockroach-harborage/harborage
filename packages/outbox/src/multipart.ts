@@ -47,7 +47,7 @@ export class MultipartUploader {
 		if (!item.original.r2) {
 			const { key, uploadId } = await this.presign.createMultipart(item);
 			item.original.r2 = {
-				bucket: 'evidence-vault',
+				bucket: 'harborage-evidence-vault',
 				key,
 				uploadId,
 				partSize: PART_SIZE,

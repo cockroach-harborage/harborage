@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { OutboxOrchestrator } from '../src/orchestrator.ts';
 import type { CipherSource, OutboxItem, OutboxStore } from '../src/types.ts';
 
@@ -121,5 +121,49 @@ describe('outbox orchestrator phase ordering', () => {
 		);
 		await orch.advance(item);
 		expect(calls).toEqual(['vault']);
+	});
+});
+
+function noteItem(): OutboxItem {
+	return {
+		id: 'note-1',
+		state: 'queued',
+		derivative: { sha256: '', size: 0, mime: '', uploaded: false },
+		original: { sha256: '', size: 0, mime: '' },
+		originalStatus: 'none',
+		attempts: 0,
+		nextEarliestRetry: 0,
+		createdAt: 0,
+		maxAge: 0
+	};
+}
+
+describe('an item with no pristine original', () => {
+	/**
+	 * A written note has nothing to vault. It used to be labelled `vaulted` --
+	 * the strongest custody claim in the vocabulary -- and §19:1261 makes that
+	 * exact field load-bearing in legal exports, so the export layer would have
+	 * repeated the claim that a note was evidence-backed.
+	 */
+	it('finishes after register and never starts a vault upload', async () => {
+		const store = memStore();
+		const step = vi.fn(async (item: OutboxItem) => ({ item }));
+		const orchestrator = new OutboxOrchestrator(
+			store,
+			{ register: async () => 'receipt-1' },
+			{ uploadDerivative: async () => {} },
+			{ step },
+			{ getCipher: async () => ({ size: 0, slice: async () => new Uint8Array(0) }) as CipherSource }
+		);
+
+		const item = noteItem();
+		const out = await orchestrator.advance(item);
+
+		expect(step).not.toHaveBeenCalled();
+		expect(out.state).toBe('done');
+		expect(out.originalStatus).toBe('none');
+		expect(out.incidentReceipt).toBe('receipt-1');
+		// And it was persisted, so a reload does not re-register it.
+		expect((await store.get(item.id))?.incidentReceipt).toBe('receipt-1');
 	});
 });

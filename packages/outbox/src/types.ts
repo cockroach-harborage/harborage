@@ -11,8 +11,14 @@ export const PART_SIZE = 5 * 1024 * 1024;
  * Custody status — a first-class, exported state (§19). `vaulted` is set ONLY
  * after CompleteMultipartUpload is confirmed. A registered hash without vaulted
  * bytes is explicitly the weaker claim, and every export must say so.
+ *
+ * `none` means there is no pristine original at all — a written note. It exists
+ * because the alternative was labelling such an item `vaulted`, which is the
+ * STRONGEST custody claim in the vocabulary applied to a record with nothing to
+ * vault. §19:1261 makes this exact field load-bearing in legal exports, so a
+ * note that reads as evidence-backed is a lie the export layer would repeat.
  */
-export type OriginalStatus = 'on_device_only' | 'vaulting' | 'vaulted' | 'lost';
+export type OriginalStatus = 'none' | 'on_device_only' | 'vaulting' | 'vaulted' | 'lost';
 
 export type ItemState =
 	| 'queued' // nothing sent yet
@@ -29,7 +35,8 @@ export interface PartRecord {
 }
 
 export interface MultipartCursor {
-	bucket: 'evidence-vault';
+	/** The real bucket name, not the short form: this value is PERSISTED. */
+	bucket: 'harborage-evidence-vault';
 	key: string; // opaque ULID key — never content-derived (no existence oracle)
 	uploadId: string;
 	partSize: number;

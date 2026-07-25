@@ -57,11 +57,22 @@ export async function getIntakeStatus(fetchFn: typeof fetch = fetch): Promise<In
 	}
 }
 
+/**
+ * POST to a media route with a per-request credential.
+ *
+ * The proof of possession binds to exactly the bytes sent, so the body is
+ * serialised ONCE and both the signature and the request use that same string.
+ * Re-serialising would produce a different byte sequence and a signature that
+ * does not verify.
+ */
 async function postJson(path: string, body: unknown, fetchFn: typeof fetch): Promise<Response> {
+	const text = JSON.stringify(body);
+	const bytes = new TextEncoder().encode(text);
+	const credential = await credentialHeaders('document', 'POST', path, bytes);
 	return fetchFn(path, {
 		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify(body)
+		headers: { 'content-type': 'application/json', ...credential },
+		body: text
 	});
 }
 
@@ -88,7 +99,17 @@ class MediaPresignClient implements PresignClient {
 			{ key: cursor.key, uploadId: cursor.uploadId, parts: cursor.parts.map((p) => ({ n: p.n, etag: p.etag })) },
 			this.fetchFn
 		);
-		if (!res.ok) throw new TransportError('no_such_upload', `complete ${res.status}`);
+		if (res.ok) return;
+		// Map the status HONESTLY. This used to call every non-2xx
+		// `no_such_upload`, which sends the uploader down the restart path: it
+		// HEADs for the object, misses, drops the cursor and re-uploads every
+		// part from zero. A transient 429 or 502 after 40 minutes of 2G would
+		// silently throw away the whole upload. Only a genuinely gone upload
+		// justifies that.
+		if (res.status === 404 || res.status === 409)
+			throw new TransportError('no_such_upload', `complete ${res.status}`);
+		if (res.status === 400) throw new TransportError('invalid_part', `complete ${res.status}`);
+		throw new TransportError('retryable', `complete ${res.status}`);
 	}
 	async abortMultipart(cursor: MultipartCursor): Promise<void> {
 		await postJson('/media/abort', { key: cursor.key, uploadId: cursor.uploadId }, this.fetchFn);
@@ -230,7 +251,7 @@ export async function sendRecord(
 			size: record.original?.sealed.size ?? 0,
 			mime: record.original?.mime ?? ''
 		},
-		originalStatus: record.original ? 'on_device_only' : 'vaulted',
+		originalStatus: record.original ? 'on_device_only' : 'none',
 		attempts: 0,
 		nextEarliestRetry: 0,
 		createdAt: record.createdAt,
@@ -240,11 +261,10 @@ export async function sendRecord(
 
 	const orchestrator = new OutboxOrchestrator(store, register, derivative, uploader, cipher);
 	try {
-		// Note-only / vault-only records have no original: register only, then stop.
-		if (!record.original) {
-			await register.register();
-			return 'sent';
-		}
+		// Note-only and vault-only records still go through the orchestrator. The
+		// previous shortcut called register() directly, so the receipt was never
+		// persisted and the row sat at `queued` forever -- indistinguishable from
+		// a send that never happened.
 		await orchestrator.advance(item);
 		return 'sent';
 	} catch (e) {
