@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	ACTIVE_COMPARTMENTS,
+	CACHED_COMPARTMENTS,
+	ONE_SHOT_ONLY_COMPARTMENTS,
 	COMPARTMENTS,
 	compartmentFromOrdinal,
 	compartmentOrdinal,
@@ -61,9 +63,46 @@ describe('compartment enum', () => {
 		expect(isCompartment('')).toBe(false);
 	});
 
-	it('keeps the M2 active set to document and directory', () => {
-		expect([...ACTIVE_COMPARTMENTS]).toEqual(['document', 'directory']);
+	it('accepts the four M4 compartments and no more', () => {
+		expect([...ACTIVE_COMPARTMENTS]).toEqual(['document', 'directory', 'medical', 'aid']);
 		for (const c of ACTIVE_COMPARTMENTS) expect(isCompartment(c)).toBe(true);
+	});
+
+	/**
+	 * The three lists answer three different questions and conflating any two of
+	 * them is a real seizure exposure, not a tidiness issue. ACTIVE is what the
+	 * server accepts a certificate for; CACHED is what a device stores a key for;
+	 * ONE_SHOT_ONLY is what may only ever be reached through a per-request key.
+	 *
+	 * M4 nearly shipped with one combined list, which would have installed a
+	 * durable medical key into IndexedDB on every device at account creation,
+	 * including the overwhelming majority that never touch the broker.
+	 */
+	it('keeps cached and one-shot compartments disjoint, and both inside active', () => {
+		expect([...CACHED_COMPARTMENTS]).toEqual(['document', 'directory']);
+		expect([...ONE_SHOT_ONLY_COMPARTMENTS]).toEqual(['medical', 'aid']);
+
+		for (const c of CACHED_COMPARTMENTS) expect(ACTIVE_COMPARTMENTS).toContain(c);
+		for (const c of ONE_SHOT_ONLY_COMPARTMENTS) expect(ACTIVE_COMPARTMENTS).toContain(c);
+
+		// Disjoint. A compartment in both lists would be stored on the device AND
+		// nominally one-shot, which is the worst of both: a durable key plus a
+		// claim that there is not one.
+		for (const c of CACHED_COMPARTMENTS) expect(ONE_SHOT_ONLY_COMPARTMENTS).not.toContain(c);
+
+		// Together they cover ACTIVE exactly. An active compartment in neither
+		// list has no defined key custody at all.
+		expect([...CACHED_COMPARTMENTS, ...ONE_SHOT_ONLY_COMPARTMENTS].sort()).toEqual(
+			[...ACTIVE_COMPARTMENTS].sort()
+		);
+	});
+
+	/** Ordinals go on the wire (cap-cert byte 6). Widening the active set must not move them. */
+	it('leaves the wire ordinals where they were', () => {
+		expect(compartmentOrdinal('medical')).toBe(5);
+		expect(compartmentOrdinal('aid')).toBe(6);
+		expect(compartmentOrdinal('document')).toBe(0);
+		expect(compartmentOrdinal('legal')).toBe(7);
 	});
 });
 

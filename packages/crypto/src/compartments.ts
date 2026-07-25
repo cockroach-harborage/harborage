@@ -22,8 +22,11 @@
 
 /**
  * Closed, APPEND-ONLY. Index = the ordinal that goes on the wire.
- * `document` and `directory` are the only ones a client may use today; the
- * rest are reserved names, and worker-side policy is what enforces that.
+ *
+ * Membership here is only a reserved NAME. Which of these a client may actually
+ * use, and on what terms, is decided by the three lists below plus worker-side
+ * policy. `community`, `accountability`, `curation` and `legal` are reserved and
+ * refused today.
  */
 export const COMPARTMENTS = [
 	'document',
@@ -38,8 +41,55 @@ export const COMPARTMENTS = [
 
 export type Compartment = (typeof COMPARTMENTS)[number];
 
-/** Compartments a client may hold keys for at M2. Widening this is a design change. */
-export const ACTIVE_COMPARTMENTS: readonly Compartment[] = ['document', 'directory'];
+/**
+ * Compartments the server will accept a capability certificate for.
+ *
+ * Widening this is a design change. It is NOT the same question as which
+ * compartments a device keeps keys for, and conflating the two is how M4 nearly
+ * shipped a new seizure exposure: see CACHED_COMPARTMENTS below.
+ */
+export const ACTIVE_COMPARTMENTS: readonly Compartment[] = [
+	'document',
+	'directory',
+	'medical',
+	'aid'
+];
+
+/**
+ * Compartments whose long-lived keys are derived and STORED at account creation.
+ *
+ * WHY THIS IS A SEPARATE LIST. apps/web installs a key per active compartment
+ * into IndexedDB when an account is made, so that a later send never has to
+ * reach for the root key while the user is standing somewhere they need to
+ * leave. That is right for `document` and `directory`, which are ordinary
+ * pseudonymous surfaces.
+ *
+ * It is wrong for the brokered ones. Adding `medical` and `aid` to a single
+ * combined list would have put a durable medical key on EVERY device at account
+ * creation, including the overwhelming majority that never touch the broker. A
+ * seized phone would then carry a stored artifact of a compartment its owner
+ * never used, and one that is specifically incriminating. It would also double
+ * the account-creation crypto on a cheap phone for keys most people never need.
+ */
+export const CACHED_COMPARTMENTS: readonly Compartment[] = ['document', 'directory'];
+
+/**
+ * Compartments reached ONLY through a per-request one-shot identity.
+ *
+ * A fresh signing key is derived from the HKDF root for each request and
+ * discarded, so no long-lived key for these ever exists on the device and there
+ * is nothing on a seized phone that says this person used the aid or medical
+ * broker. The server enforces the same rule from the other side: a certificate
+ * for one of these compartments is refused unless the endpoint asked for
+ * one-shot admission.
+ *
+ * HONEST LIMIT. The server cannot actually tell a one-shot certificate from a
+ * cached one, because both are ordinary self-issued cap-certs and which HKDF
+ * leaf minted the key is invisible on the wire. What the server rule buys is a
+ * short TTL clamp, which bounds the cost of being wrong. The property that this
+ * device holds no stored key is a CLIENT property, kept by the client.
+ */
+export const ONE_SHOT_ONLY_COMPARTMENTS: readonly Compartment[] = ['medical', 'aid'];
 
 export function isCompartment(value: string): value is Compartment {
 	return (COMPARTMENTS as readonly string[]).includes(value);
@@ -92,7 +142,9 @@ export const FIRST_EPOCH = 1;
 export const MAX_EPOCH = 2 ** 31 - 1;
 
 export function isValidEpoch(value: unknown): value is number {
-	return Number.isInteger(value) && (value as number) >= FIRST_EPOCH && (value as number) <= MAX_EPOCH;
+	return (
+		Number.isInteger(value) && (value as number) >= FIRST_EPOCH && (value as number) <= MAX_EPOCH
+	);
 }
 
 /** Next epoch, or null at the ceiling (start a new account rather than wrap). */
@@ -117,7 +169,11 @@ export const SIG_CONTEXT = {
 	/** A corroboration cast on an item. */
 	corroboration: 'harborage/sig/corroboration/v1',
 	/** A report-a-problem on a directory entry. */
-	directoryReport: 'harborage/sig/directory-report/v1'
+	directoryReport: 'harborage/sig/directory-report/v1',
+	/** A brokered aid request card, sealed to a counterparty one-shot prekey. */
+	aidRequest: 'harborage/sig/aid-request/v1',
+	/** A responder's acceptance of an open need. */
+	aidAccept: 'harborage/sig/aid-accept/v1'
 } as const;
 
 export type SigContext = (typeof SIG_CONTEXT)[keyof typeof SIG_CONTEXT];

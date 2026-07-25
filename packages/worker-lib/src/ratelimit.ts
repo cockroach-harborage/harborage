@@ -46,9 +46,9 @@ function stub(env: RateLimitBindings, name: string): RateLimitStub {
 /** First 8 bytes of SHA-256, hex. Never logged, never persisted. */
 export async function bucketKey(value: string): Promise<string> {
 	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-	return Array.from(new Uint8Array(digest).slice(0, 8), (b) => b.toString(16).padStart(2, '0')).join(
-		''
-	);
+	return Array.from(new Uint8Array(digest).slice(0, 8), (b) =>
+		b.toString(16).padStart(2, '0')
+	).join('');
 }
 
 /** Stable shard from an already-hashed key, so retries land consistently. */
@@ -97,7 +97,73 @@ export async function admitCredential(
 	env: RateLimitBindings,
 	opts: { certHashHex: string; nonceHex: string; retainMs: number; cost?: number }
 ): Promise<AdmitVerdict> {
-	return stub(env, `cap:${opts.certHashHex}`).admit(
+	return stub(env, `cap:${opts.certHashHex}`).admit(opts.nonceHex, opts.retainMs, opts.cost ?? 1);
+}
+
+/**
+ * Fixed shard count for one-shot admission. A power of two so the first nonce
+ * byte maps evenly.
+ */
+export const ONESHOT_SHARDS = 256;
+
+/**
+ * Which shard a one-shot proof lands on. Stable in the nonce, which is the
+ * entire point: the SAME nonce always reaches the SAME instance, so a replay
+ * necessarily meets the record of its original.
+ */
+export function oneShotShardFor(nonceHex: string): string {
+	const first = Number.parseInt(nonceHex.slice(0, 2) || '0', 16);
+	const shard = (Number.isNaN(first) ? 0 : first) % ONESHOT_SHARDS;
+	return `one:${shard.toString(16).padStart(2, '0')}`;
+}
+
+/**
+ * Anti-replay for a request carrying a PER-REQUEST certificate.
+ *
+ * WHY NOT admitCredential. That function addresses `cap:<certHashHex>`, which is
+ * correct for a certificate reused across many requests: the instance is the
+ * credential, and the credential's nonces live with it. A one-shot certificate
+ * has a fresh hash every time, so the same call would mint a NEW Durable Object
+ * per request. That is unbounded instance creation driven by an unauthenticated
+ * caller, which is an amplification vector wearing a rate limiter's clothes. It
+ * would also silently lose replay detection, because a replayed request carries
+ * a certificate hash the system has never seen and so lands somewhere empty.
+ *
+ * Sharding on the nonce keeps the property that matters. Detection is EXACT,
+ * not probabilistic: a replay is by definition the same nonce, the same nonce
+ * hashes to the same shard, and that shard's seen-map answers 'replay'. With a
+ * 128-bit nonce, two honest clients colliding needs on the order of 2^64
+ * requests.
+ *
+ * THREE HONEST LIMITS, none of which this function fixes:
+ *
+ *  1. THIS IS NOT A RATE LIMIT AND MUST NOT BE DESCRIBED AS ONE. The shard is
+ *     selected by a value the CLIENT chooses. An attacker spreading nonces
+ *     uniformly gets ONESHOT_SHARDS times the burst allowance instead of one
+ *     bucket's worth; an attacker concentrating them can drain a single shard
+ *     and deny it to honest callers. The real volume defence on a one-shot route
+ *     is broadTiersOk, whose shard is keyed on a hash of the connecting IP that
+ *     the client cannot pick, plus Turnstile, plus the broker's own caps. What
+ *     this bucket is, is a memory-exhaustion backstop.
+ *  2. A 429 here is retryable with a fresh nonce, which lands on a different
+ *     shard with probability (ONESHOT_SHARDS-1)/ONESHOT_SHARDS. That turns the
+ *     targeted-shard attack from a denial into a retry, and it only works
+ *     because the client mints a new nonce rather than replaying the rejected
+ *     one.
+ *  3. Nonce eviction under flood forgets early. Filling one shard past the DO's
+ *     nonce ceiling evicts a victim's nonce and reopens its replay window for
+ *     the remainder of the freshness policy. Same class of limit already
+ *     documented on the RateLimit class, bounded by the broad tiers.
+ *
+ * Salting the shard with a server secret to make it unsteerable was considered
+ * and rejected: a new binding is a new failure mode and a new fail-closed path,
+ * for a property the broad tiers already own.
+ */
+export async function admitOneShot(
+	env: RateLimitBindings,
+	opts: { nonceHex: string; retainMs: number; cost?: number }
+): Promise<AdmitVerdict> {
+	return stub(env, oneShotShardFor(opts.nonceHex)).admit(
 		opts.nonceHex,
 		opts.retainMs,
 		opts.cost ?? 1
