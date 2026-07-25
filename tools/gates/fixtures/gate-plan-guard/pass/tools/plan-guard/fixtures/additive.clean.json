@@ -1,0 +1,32 @@
+{
+	"format_version": "1.2",
+	"resource_changes": [
+		{
+			"address": "cloudflare_workers_kv_namespace.rulesets",
+			"type": "cloudflare_workers_kv_namespace",
+			"change": {
+				"actions": [
+					"no-op"
+				]
+			}
+		},
+		{
+			"address": "cloudflare_queue.moderation_bulk",
+			"type": "cloudflare_queue",
+			"change": {
+				"actions": [
+					"create"
+				]
+			}
+		},
+		{
+			"address": "cloudflare_dns_record.spf",
+			"type": "cloudflare_dns_record",
+			"change": {
+				"actions": [
+					"update"
+				]
+			}
+		}
+	]
+}

@@ -1,0 +1,15 @@
+{
+	"format_version": "1.2",
+	"resource_changes": [
+		{
+			"address": "cloudflare_r2_bucket.evidence_vault",
+			"type": "cloudflare_r2_bucket",
+			"change": {
+				"actions": [
+					"delete",
+					"create"
+				]
+			}
+		}
+	]
+}

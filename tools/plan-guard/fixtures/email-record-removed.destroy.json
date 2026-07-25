@@ -1,0 +1,23 @@
+{
+	"format_version": "1.2",
+	"resource_changes": [
+		{
+			"address": "cloudflare_dns_record.spf",
+			"type": "cloudflare_dns_record",
+			"change": {
+				"actions": [
+					"delete"
+				]
+			}
+		},
+		{
+			"address": "cloudflare_queue.life_safety",
+			"type": "cloudflare_queue",
+			"change": {
+				"actions": [
+					"no-op"
+				]
+			}
+		}
+	]
+}
