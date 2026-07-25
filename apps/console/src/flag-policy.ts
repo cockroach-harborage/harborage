@@ -52,7 +52,15 @@ export const FLIPPABLE = [
 	// on a vetting issuer existing, which packages/worker-lib/medical.ts refuses
 	// to supply while PINNED_VETTING_ISSUERS is empty, so every HIGH-tier offer
 	// refuses regardless of this flag.
-	'helper_registry'
+	'helper_registry',
+	// The zone-level live board. Switch-on additionally waits on the §6.4
+	// parameters being signed off by counsel and on live_zones holding a signed
+	// row, neither of which a flag can supply: with zero active zones every
+	// ingest refuses regardless.
+	'live_board',
+	// Crowd bands only, separate so they can be dropped without closing the
+	// hazard board. Disabled entirely under heightened threat.
+	'crowd_bands'
 ] as const;
 
 /** Irreversible high-harm gates: built, but permanently OFF at this milestone. */

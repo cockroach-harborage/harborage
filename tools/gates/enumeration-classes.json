@@ -31,6 +31,7 @@
 		"archive_items",
 		"archive_provenance",
 		"archive_disputes",
-		"archive_source_refs"
+		"archive_source_refs",
+		"live_zones"
 	]
 }

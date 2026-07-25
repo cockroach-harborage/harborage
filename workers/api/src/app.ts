@@ -27,12 +27,24 @@ import {
 } from '@harborage/worker-lib/broker';
 import { requireOnionOrigin } from '@harborage/worker-lib/onion';
 import { medicTier } from '@harborage/worker-lib/medical';
+import {
+	isZoneId,
+	MARSHAL_QUORUM_M,
+	MARSHAL_QUORUM_MIN_KEYS,
+	SIGNAL_TYPES,
+	requiresQuorum,
+	type BoardView,
+	type SignalType
+} from '@harborage/worker-lib/liveboard';
+import { verifyRoleQuorum, type RoleSignature } from '@harborage/crypto/quorum';
+import { SIG_CONTEXT } from '@harborage/crypto/compartments';
 import { bandFor, BANDS, TIERS, type Band, type Tier } from '@harborage/worker-lib/capacity';
 import { featureAvailable, flagEnabled } from '@harborage/worker-lib/flags';
 import { coarseMs, safeLog, statusClass } from '@harborage/worker-lib/safe-log';
 import { verifyTurnstile } from '@harborage/worker-lib/turnstile';
 import {
 	nonceRetentionMs,
+	ONE_SHOT_MAX_TTL_MS,
 	verifyRequestCredential,
 	type CredentialResult
 } from '@harborage/worker-lib/cap-cert';
@@ -129,7 +141,7 @@ async function credentialOk(
 	c: { req: { raw: Request }; env: ApiEnv },
 	body: Uint8Array,
 	compartment: Compartment
-): Promise<{ ok: boolean; outcome: string }> {
+): Promise<{ ok: boolean; outcome: string; certHashHex?: string; oneShot?: boolean }> {
 	const result: CredentialResult = await verifyRequestCredential(c.req.raw, body, {
 		nowMs: Date.now(),
 		compartment
@@ -141,7 +153,19 @@ async function credentialOk(
 		nonceHex: result.nonceHex,
 		retainMs: nonceRetentionMs({})
 	});
-	return { ok: verdict === 'ok', outcome: verdict };
+	// A certificate whose life is under the one-shot ceiling was almost certainly
+	// minted per request. The live board refuses those: its dedup token derives
+	// from the certificate hash, so a fresh certificate per heartbeat is a fresh
+	// apparent reporter every 45 seconds. The server cannot PROVE a certificate is
+	// one-shot (both are ordinary self-issued cap-certs), so this is a heuristic on
+	// the claimed TTL, and it is stated as one.
+	const ttlMs = result.cert.expiresAtMs - result.cert.issuedAtMs;
+	return {
+		ok: verdict === 'ok',
+		outcome: verdict,
+		certHashHex: result.certHashHex,
+		oneShot: ttlMs <= ONE_SHOT_MAX_TTL_MS
+	};
 }
 
 /**
@@ -1299,6 +1323,144 @@ const OFFER_LIFETIME_EPOCHS = 7;
 export function offerEpochOf(nowMs: number): number {
 	return Math.floor(nowMs / OFFER_EPOCH_MS);
 }
+
+
+// --- The live board (ARCHITECTURE §6; PRD §4.5) -------------------------------
+
+/** The slice of LiveBoard this Worker calls. */
+interface LiveBoardStub {
+	report(input: {
+		zoneId: string;
+		signal: SignalType;
+		certHashHex: string;
+		marshalValid?: boolean;
+	}): Promise<'accepted'>;
+	view(opts: { sinceTick?: number; waitMs?: number }): Promise<BoardView>;
+	viewHeightened(): Promise<BoardView>;
+}
+
+/**
+ * POST /api/live/report — one hazard signal for one zone.
+ *
+ * THE SCHEMA CHECK RUNS FIRST, before the flag and before the credential, and it
+ * rejects any coordinate-shaped key by NAME. Two reasons, and the second is the
+ * one that bites: a route behind a credential returns 401 before reaching the
+ * code under test, so with the credential first a test asserting "a body with a
+ * latitude is refused" would pass with the schema rule deleted. The M4 lesson,
+ * applied before the mistake.
+ *
+ * THE CREDENTIAL IS THE LONG-LIVED ONE, NEVER A ONE-SHOT, and the route rejects
+ * a one-shot explicitly. The dedup token is derived from the certificate hash,
+ * so a fresh certificate per heartbeat means a fresh apparent reporter every 45
+ * seconds. At the heartbeat rate that inflates the count without bound and
+ * defeats both the density floor and the corroboration bar. This is the one place
+ * where M4's one-shot machinery is actively wrong.
+ */
+app.post('/api/live/report', async (c) => {
+	const raw = new Uint8Array(await c.req.raw.clone().arrayBuffer());
+	let body: unknown;
+	try {
+		body = JSON.parse(new TextDecoder().decode(raw));
+	} catch {
+		return c.json({ error: 'bad body' }, 400);
+	}
+	if (typeof body !== 'object' || body === null) return c.json({ error: 'bad body' }, 400);
+
+	// Exact shape. An extra key is a field nobody decided was safe to accept, and
+	// on this route the field somebody will add is a coordinate.
+	const keys = Object.keys(body).sort();
+	const allowed = ['marshal', 'signal', 'zone_id'];
+	for (const k of keys) {
+		if (!allowed.includes(k)) return c.json({ error: 'bad body' }, 400);
+	}
+	const { zone_id: zoneId, signal, marshal } = body as {
+		zone_id?: unknown;
+		signal?: unknown;
+		marshal?: unknown;
+	};
+	if (typeof zoneId !== 'string' || !isZoneId(zoneId)) return c.json({ error: 'bad body' }, 400);
+	if (typeof signal !== 'string' || !(SIGNAL_TYPES as readonly string[]).includes(signal))
+		return c.json({ error: 'bad body' }, 400);
+
+	if (!(await broadOk(c))) return c.text('slow down', 429);
+	// Writes fail CLOSED. Reads are the ones that must never go dark.
+	if (!(await flagEnabled(c.env.FLAGS, 'live_board'))) return c.text('not open', 403);
+
+	const credential = await credentialOk(c, raw, 'document');
+	if (!credential.ok) {
+		safeLog('credential_rejected', { route: c.req.routePath, outcome: credential.outcome });
+		return c.text('credential required', 401);
+	}
+	// A one-shot certificate on this route would inflate the reporter count by the
+	// heartbeat rate. Refused explicitly rather than relied on being unusual.
+	if (credential.oneShot) return c.text('credential required', 401);
+
+	// The zone must be on the signed list AND active. live_zones ships with zero
+	// rows, so this refuses every zone today.
+	let active = false;
+	try {
+		const row = await c.env.DB.prepare(
+			'SELECT zone_id FROM live_zones WHERE zone_id = ?1 AND active = 1'
+		)
+			.bind(zoneId)
+			.first<{ zone_id: string }>();
+		active = row !== null;
+	} catch {
+		// A read failure on a WRITE path fails closed.
+		return c.text('not open', 403);
+	}
+	if (!active) return c.text('not open', 403);
+
+	// SAFE_EXIT and DISPERSAL need a marshal quorum, verified BEFORE the Durable
+	// Object is addressed: an unquorumed one must cost no instance and leave no
+	// trace of having been attempted.
+	let marshalValid = false;
+	if (requiresQuorum(signal as SignalType)) {
+		const bundle = marshal as { signatures?: RoleSignature[]; hashHex?: string } | undefined;
+		if (!bundle?.signatures || typeof bundle.hashHex !== 'string')
+			return c.text('not open', 403);
+		const directory = await c.env.DB.prepare(
+			"SELECT key_id, public_key, role, valid_from_epoch, valid_to_epoch FROM key_directory WHERE role = 'marshal'"
+		).all<{
+			key_id: string;
+			public_key: string;
+			role: string;
+			valid_from_epoch: number;
+			valid_to_epoch: number | null;
+		}>();
+		const revocations = await c.env.DB.prepare(
+			'SELECT key_id, revoked_at_epoch FROM revocation_list'
+		).all<{ key_id: string; revoked_at_epoch: number }>();
+		const quorum = verifyRoleQuorum({
+			contextTag: SIG_CONTEXT.marshalSignal,
+			messageHash: hexToBytes(bundle.hashHex),
+			signatures: bundle.signatures,
+			directory: directory.results ?? [],
+			revocations: revocations.results ?? [],
+			requiredRole: 'marshal',
+			required: MARSHAL_QUORUM_M,
+			minDistinctKeys: MARSHAL_QUORUM_MIN_KEYS,
+			epoch: 1
+		});
+		// WITHHELD, not shown low-confidence: a wrong SAFE_EXIT walks people into a
+		// kettle, so an unquorumed one is refused at ingest rather than stored.
+		if (!quorum.valid) return c.text('not open', 403);
+		marshalValid = true;
+	}
+
+	const ns = c.env.LIVE_BOARD;
+	const board = ns.get(ns.idFromName(`zone:${zoneId}`)) as unknown as LiveBoardStub;
+	await board.report({
+		zoneId,
+		signal: signal as SignalType,
+		certHashHex: credential.certHashHex ?? '',
+		marshalValid
+	});
+
+	// One flat 202 for every outcome. The board's own view is the only channel a
+	// reporter has to learn board state, and it is delayed and floored.
+	return c.json({ ok: true }, 202, { 'cache-control': 'no-store' });
+});
 
 app.notFound((c) => c.text('not found', 404));
 
