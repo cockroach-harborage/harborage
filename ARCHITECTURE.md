@@ -1152,7 +1152,7 @@ Production zone: `cockroachharborage.org` (value flows via `terraform.tfvars`, n
 | `console` | Privileged surface behind Access + HW-MFA; flag admin | `console.` subdomain | **M0** (stub + FlagState) |
 | `api` | Pseudonymous writes; sealed-envelope enforcement; hosts most DOs | `/api/*` | M1 |
 | `media` | Presigned multipart R2 URLs (aws4fetch); bytes never proxy | `/media/*` | M1 |
-| `consumer` | Queue consumer (Tier-0 triage, fan-out); DLQ mandatory | no route | M2 |
+| `consumer` | Queue consumer (Tier-0 triage, fan-out); DLQ mandatory; **no route, so no HTTP surface**; first writer of `incidents` | no route | M2 |
 
 **Durable Objects** (Wrangler owns all bindings + `new_sqlite_classes` migrations; cross-script via `script_name`; alarm on `memoryUsageBytesP99` per memory-only class from M2):
 

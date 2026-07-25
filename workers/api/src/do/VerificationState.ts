@@ -28,7 +28,7 @@ import {
 	type Observations,
 	type Policy,
 	type State
-} from '../verification/machine.ts';
+} from '@harborage/worker-lib/verification';
 
 interface Env {
 	FLAGS: KVNamespace;

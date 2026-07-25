@@ -85,7 +85,14 @@ export interface MediaEnv extends FlagBindings {
 /** workers/consumer — M2 */
 export interface ConsumerEnv extends FlagBindings {
 	DB: D1Database;
+	/** Hosted by workers/api; bound cross-script, so api deploys first. */
 	VERIFICATION_STATE: DurableObjectNamespace;
+	/**
+	 * Tier-0 rulesets. KV-resident and never committed: a published incitement
+	 * lexicon is a bypass cheat-sheet, and a repository copy would also trip
+	 * gate-ai-tells on its own vocabulary.
+	 */
+	RULESETS: KVNamespace;
 	/**
 	 * PRIVATE half of the intake sealed-box keypair. A wrangler secret on the
 	 * consumer ONLY — never on api, web or console.
