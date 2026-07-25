@@ -22,6 +22,10 @@ import {
 
 export { FlagState } from './do/FlagState.ts';
 export { NoticeLog } from './do/NoticeLog.ts';
+// Exported so the runtime can instantiate the class. NO ROUTE reaches it yet: the
+// operator surface is PR 18, and accountability_naming is LOCKED with no
+// FLAG_NAMES entry, so nothing here can be consulted from a Worker regardless.
+export { ReviewGate } from './do/ReviewGate.ts';
 
 interface FlagStateStub {
 	list(): Promise<FlagRow[]>;

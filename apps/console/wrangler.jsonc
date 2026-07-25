@@ -17,13 +17,15 @@
 	"durable_objects": {
 		"bindings": [
 			{ "name": "FLAG_STATE", "class_name": "FlagState" },
-			{ "name": "NOTICE_LOG", "class_name": "NoticeLog" }
+			{ "name": "NOTICE_LOG", "class_name": "NoticeLog" },
+			{ "name": "REVIEW_GATE", "class_name": "ReviewGate" }
 		]
 	},
-	// Never edit tag v1 (already deployed); add NoticeLog under a new tag.
+	// Never edit a deployed tag. v1 and v2 are live; ReviewGate goes under v3.
 	"migrations": [
 		{ "tag": "v1", "new_sqlite_classes": ["FlagState"] },
-		{ "tag": "v2", "new_sqlite_classes": ["NoticeLog"] }
+		{ "tag": "v2", "new_sqlite_classes": ["NoticeLog"] },
+		{ "tag": "v3", "new_sqlite_classes": ["ReviewGate"] }
 	],
 	"kv_namespaces": [{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" }],
 	"d1_databases": [
