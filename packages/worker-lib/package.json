@@ -15,6 +15,7 @@
 		"./ratelimit": "./src/ratelimit.ts",
 		"./verification": "./src/verification/machine.ts",
 		"./archive": "./src/archive/index.ts",
+		"./onion": "./src/onion.ts",
 		"./reputation": "./src/reputation.ts"
 	},
 	"scripts": {
