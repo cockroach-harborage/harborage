@@ -15,17 +15,37 @@ export interface FlagRecord {
 	updatedAt: string;
 }
 
-/** Known flags. Every data-holding feature has one and ships OFF. */
-export type FlagName =
-	| 'heightened_threat'
-	| 'notices_publish'
-	| 'directory_intake'
-	| 'document_intake'
-	| 'evidence_vault'
-	| 'incidents_publish'
-	| 'ai_moderation'
-	| 'community_corroborate'
-	| 'archive_anchoring';
+/**
+ * Known flags. Every data-holding feature has one and ships OFF.
+ *
+ * A runtime array rather than a bare union, so the other half of the edit can be
+ * checked. Adding a flag has always required touching this file AND
+ * apps/console/src/flag-policy.ts, and a union alone gives a test nothing to
+ * enumerate: a flag added here and forgotten there is unflippable with no
+ * failure anywhere. `FLAG_NAMES` lets apps/console assert that every known flag
+ * is classified as either flippable or locked, with none left over.
+ */
+export const FLAG_NAMES = [
+	'heightened_threat',
+	'notices_publish',
+	'directory_intake',
+	'document_intake',
+	'evidence_vault',
+	'incidents_publish',
+	'ai_moderation',
+	'community_corroborate',
+	'archive_anchoring',
+	// The permanent public archive: admission, dedup, the server-side master and
+	// the §63 export surface. Separate from evidence_vault because vaulting a
+	// sealed original and PUBLISHING a redacted derivative forever are different
+	// decisions with different irreversibility.
+	'archive_publish',
+	// Fingerprint-and-reference of off-platform media. There is no fetch path and
+	// no URL is stored; switch-on is the counsel-gated source ToS question.
+	'source_import'
+] as const;
+
+export type FlagName = (typeof FLAG_NAMES)[number];
 
 export async function flagEnabled(kv: KVNamespace, name: FlagName): Promise<boolean> {
 	try {
