@@ -13,8 +13,8 @@
 		{
 			"endpoint": "POST /api/things/keyring",
 			"class": "SEALED-E2E",
-			"sealed_object": "thing-content-key",
-			"note": "A different sealed object, opened by no platform key. This is the case the lane scoping exists to allow, so the pass fixture has to contain it or the relaxation is never exercised."
+			"sealed_object": "thing-metadata-envelope",
+			"note": "Broken invariant: this claims E2E over the SAME sealed object that the registered key above opens. Scoping custody to a lane must not become a way to claim E2E over ciphertext the platform can already read."
 		}
 	]
 }

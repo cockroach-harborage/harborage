@@ -3,8 +3,7 @@
 		{
 			"endpoint": "POST /api/things/register",
 			"class": "SEALED-TO-PLATFORM",
-			"sealed_object": "thing-metadata-envelope",
-			"note": "Fixture endpoint for gate-selftest. Broken invariant: the declared key no longer exists, so the custody claim is stale.",
+			"note": "Broken invariant: no sealed_object. Custody has to be a claim about a NAMED body of ciphertext, so an entry that does not say which one cannot be checked at all. There is deliberately no default, because either default silently decides a custody question on the author's behalf.",
 			"platform_key": {
 				"binding": "INTAKE_PRIVATE_KEY",
 				"why": "Private half of the intake sealed-box keypair, held only by the consumer, which is the sole reader of the metadata envelope."

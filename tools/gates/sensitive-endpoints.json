@@ -1,18 +1,20 @@
 {
-	"comment": "Every sensitive intake endpoint must be listed here with its custody CLASS, and gate-sealed-body.mjs enforces a real rejection test per entry. The class is load-bearing: 'sealed' is not one property. Calling a platform-readable body E2E is the kind of overclaim CLAUDE.md treats as a correctness failure, not a wording preference.",
+	"comment": "Every sensitive intake endpoint must be listed here with its custody CLASS and the SEALED OBJECT it accepts, and gate-sealed-body.mjs enforces a real rejection test per entry. The class is load-bearing: 'sealed' is not one property. Calling a platform-readable body E2E is the kind of overclaim CLAUDE.md treats as a correctness failure, not a wording preference.",
 	"classes": {
-		"SEALED-E2E": "The platform holds NO key and exposes no unwrap endpoint. 'We cannot produce plaintext' is literally true. No worker may hold a matching private key or unseal secret — the gate checks for one.",
+		"SEALED-E2E": "The platform holds NO key for this sealed object and exposes no unwrap endpoint. 'We cannot produce plaintext' is literally true of THIS ciphertext. The gate fails if any registered platform key opens this sealed object, and also if any unseal-shaped binding is unregistered, since a key nobody scoped has to be assumed to open everything.",
 		"SEALED-TO-PLATFORM": "Hop confidentiality and blast-radius hardening only. The body is sealed in transit and at rest in the queue, but a platform-side key can open it by design. Buys real defence against a compromised edge worker or accidental logging. Buys NOTHING against legal compulsion, which is the stated adversary. Never describe this class as end-to-end."
 	},
-	"platform_keys_comment": "A SEALED-TO-PLATFORM endpoint may name the binding that opens it. The gate requires EVERY unseal-shaped binding in the codebase to be declared here with a justification, and still forbids any of them existing at all once a SEALED-E2E endpoint is declared. Naming the key honestly is the point: the alternative was choosing an obscure binding name so the pattern would not match, which leaves the check green while the property it guards quietly stops holding.",
+	"sealed_object_comment": "The name of one body of ciphertext. Custody is a claim about a specific object, not about a whole deployment: the incident metadata envelope and the evidence content key are different lanes with different claims, and a key that opens one says nothing about the other. Required on every entry, with no default, because a missing lane would have to silently mean either 'opens nothing' or 'opens everything'.",
+	"platform_keys_comment": "A SEALED-TO-PLATFORM endpoint must name the binding that opens it; that binding is registered as opening THAT entry's sealed object and nothing else. Every unseal-shaped binding in the codebase must be registered somewhere, or every SEALED-E2E claim in the file fails. Naming the key honestly is the point: the alternative was choosing an obscure binding name so the pattern would not match, which leaves the check green while the property it guards quietly stops holding.",
 	"endpoints": [
 		{
 			"endpoint": "POST /api/incidents/register",
 			"class": "SEALED-TO-PLATFORM",
-			"note": "The incident note is PUBLIC-PLAINTEXT-destined: it is meant to become the public incident record, so the consumer must be able to read it. The evidence ORIGINAL is a separate object and stays SEALED-E2E (reporter + off-platform custodian, no key on the platform, no unwrap endpoint). Honest-limits copy must keep those two apart.",
+			"sealed_object": "incident-metadata-envelope",
+			"note": "The incident note is PUBLIC-PLAINTEXT-destined: it is meant to become the public incident record, so the consumer must be able to read it. The evidence ORIGINAL and its content key are separate sealed objects with a stricter claim. Honest-limits copy must keep those apart.",
 			"platform_key": {
 				"binding": "INTAKE_PRIVATE_KEY",
-				"why": "Private half of the intake sealed-box keypair, held as a wrangler secret on workers/consumer ONLY. The consumer is the sole reader of the metadata envelope and the first writer of the incidents table. api, web and console must never bind it: they have no reason to read the body, and holding it there would widen the blast radius of an edge compromise for nothing."
+				"why": "Private half of the intake sealed-box keypair, held as a wrangler secret on workers/consumer ONLY. The consumer is the sole reader of the metadata envelope and the first writer of the incidents table. api, web and console must never bind it: they have no reason to read the body, and holding it there would widen the blast radius of an edge compromise for nothing. It opens the incident metadata envelope and no other sealed object."
 			}
 		}
 	]
