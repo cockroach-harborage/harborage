@@ -242,6 +242,56 @@ set to the exact resource addresses, and a line in RUNBOOK.md saying why.
 
 ---
 
+### 2.5 Evidence archive (before `archive_publish`)
+
+Everything below is built, tested and shipped **OFF**. None of it blocks
+building; each blocks a flag.
+
+| Before flipping | You need | Why it cannot be decided in code |
+|---|---|---|
+| `archive_publish` | **Counsel sets the probation window** (30–90 days) | §16 leaves the number to counsel. The code defaults to the longest, 90 days, which is the safe direction: certainty about a piece of media grows with time and with new known-bad lists. |
+| `archive_publish` | **Counsel + a qualified expert approve the §63 certificate form** | The platform *assembles* the artifact and there is deliberately no code path that signs it. A §63(4) certificate is a statement by a person in charge and a qualified expert; a server that could mint one would be forging their attestation. |
+| `archive_publish` | **A rolling known-bad re-scan source** | The probation sweep advances the clock and reports *no* re-scan result, because saying "no hit" without actually scanning would be a claim we cannot support. Until a source exists, an item clears on time-plus-no-objection only. |
+| `source_import` | **Counsel on source terms** | Built as fingerprint-and-reference with **no fetch path at all** — `gate-archive-custody` fails the build if one appears. Flipping it stores a publisher's content id and a client fingerprint and nothing else. Re-hosting is a separate, later decision. |
+| `evidence_vault` (already listed in 2.2) | **An off-platform custodian in another jurisdiction** | `PINNED_CUSTODIAN_KEYS` ships empty, so every content-key wrap refuses regardless of the flag. |
+
+**One thing to know rather than do:** the archive master ships as **WebP, not
+AVIF**, which is a deliberate departure from ARCHITECTURE §16 Lever 2. The live
+Images limits table lists "Image dimension, AVIF | 1,200 pixels" against 12,000
+for everything else and does not say whether that bounds input or output, and
+§7.5's 1,280 px legibility floor is what keeps a badge number readable. If you
+ever want AVIF, measure a 2048 px AVIF output against the real account first;
+it is one constant (`MASTER_FORMAT` in `workers/media/src/app.ts`) away.
+
+### 2.6 Brokered aid — medical and detention (before `medical_broker`)
+
+**These flags are flippable and flipping them changes nothing.** Medical and
+detention brokering are onion-only and refuse over clearnet, and there is no
+onion origin, so every one of those routes returns 403 for everyone on every
+network. That is the correct resting state, not a bug.
+
+To make them actually work you need, in this order:
+
+1. **An operated Tor v3 `.onion` origin** — a VPS off Cloudflare that terminates
+   the circuit and forwards to the Worker ingest endpoint. This is a funded,
+   staffed milestone: it is a new compellable party, new ops burden, and its own
+   single point of failure. Do not treat it as a weekend task.
+2. **Set the ingress secret** once that VPS exists, from `workers/api`:
+   ```bash
+   pnpm exec wrangler secret put ONION_INGRESS_MAC_KEY
+   ```
+   Use the same value on the VPS. It verifies a MAC and opens no ciphertext, so
+   it is not an unseal key and is deliberately not named like one.
+3. **The Capacitor APK bundling Orbot/Arti**, because a stock browser PWA cannot
+   reach a `.onion` at all.
+
+Until all three exist, the honest user-facing wording is that this part **is not
+open** and needs a different network path and the phone app — never "coming
+soon". That wording is a promise to users and wants your sign-off in EN, with a
+human HI review.
+
+---
+
 ## Part 3 — Deferred until people join after the build
 
 Correctly parked. Each needs a person who is not you, and doing them alone
@@ -256,7 +306,10 @@ than the honest gap.
 | **Staffed moderation org** | Gates the irreversible m-of-n unlocks (naming, unredaction, precise-location reveal, permanent delete). Those ship OFF behind an unsatisfiable quorum by design. |
 | **≥2 reviewers on sensitive paths** | Cannot exist with one maintainer. Do **not** add a second account or a bot approver to satisfy it. |
 | **Two-person production deploy** | Today the required reviewer is the account that pushes, so it is a confirmation dialog. Add a second reviewer to the `production` environment when someone joins. |
-| **Off-platform evidence custodians** | The vault's "we cannot produce plaintext" needs a custodian in another jurisdiction. Gates the evidence tier at M3. |
+| **Off-platform evidence custodians** | The vault's "we cannot produce plaintext" needs a custodian in another jurisdiction. Gates the evidence tier at M3. `PINNED_CUSTODIAN_KEYS` ships empty so every wrap refuses. |
+| **Marshal role keys (M5)** | SAFE_EXIT and DISPERSAL publish only with ≥2 distinct role-bound marshal signatures. `key_directory` has zero rows and migrations carry zero INSERTs, so no quorum can form and no such signal can publish. Needs a key ceremony and a revocation-propagation plan. |
+| **≥3 accountability reviewer role keys (M5)** | Publication is quorum-required over an identical canonical record hash. Removal stays single-reviewer, so the worst an infiltrated reviewer can do alone is suppress — an accepted fail-safe direction. |
+| **A named human broker for incommunicado alerts (M5)** | Two independent authenticated triggers plus a human confirmation, by design. One person cannot be both triggers and the confirmer. |
 
 ---
 
