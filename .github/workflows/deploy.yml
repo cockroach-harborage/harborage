@@ -282,7 +282,12 @@ jobs:
           D1_ID=$(tofu output -raw d1_harborage_id)
           ACCESS_AUD=$(tofu output -raw access_console_aud)
           echo "::add-mask::${ACCESS_AUD}"
-          for id_var in KV_FLAGS_ID KV_CONFIG_ID KV_I18N_ID KV_KEYDIR_CACHE_ID KV_RULESETS_ID D1_ID ACCESS_AUD; do
+          # Sitekey is public by design (it is embedded in the page); the secret
+          # is not, and is masked before it can reach a log line.
+          TURNSTILE_SITEKEY=$(tofu output -raw turnstile_sitekey)
+          TURNSTILE_SECRET=$(tofu output -raw turnstile_secret)
+          echo "::add-mask::${TURNSTILE_SECRET}"
+          for id_var in KV_FLAGS_ID KV_CONFIG_ID KV_I18N_ID KV_KEYDIR_CACHE_ID KV_RULESETS_ID D1_ID ACCESS_AUD TURNSTILE_SITEKEY TURNSTILE_SECRET; do
             echo "${id_var}=${!id_var}" >> "$GITHUB_ENV"
           done
 
@@ -318,9 +323,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
         run: |
           # api serves /api/* via a route that takes precedence over the web
-          # Custom Domain. All writes ship behind fail-closed flags (OFF); the
-          # Turnstile secret is set only at intake switch-on (RUNBOOK).
-          sed -i "s/REPLACE_KV_FLAGS_ID/${KV_FLAGS_ID}/; s/REPLACE_KV_KEYDIR_CACHE_ID/${KV_KEYDIR_CACHE_ID}/; s/REPLACE_D1_ID/${D1_ID}/" wrangler.jsonc
+          # Custom Domain. All writes ship behind fail-closed flags (OFF).
+          #
+          # The sitekey is a var, not a secret: it is public, and routing it
+          # through the api Worker means GET /api/intake/status can hand it to
+          # the client alongside the intake public key. No prerendered page
+          # needs a build-time substitution, so the app shell stays static.
+          sed -i "s/REPLACE_KV_FLAGS_ID/${KV_FLAGS_ID}/; s/REPLACE_KV_KEYDIR_CACHE_ID/${KV_KEYDIR_CACHE_ID}/; s/REPLACE_D1_ID/${D1_ID}/; s|REPLACE_TURNSTILE_SITEKEY|${TURNSTILE_SITEKEY}|" wrangler.jsonc
           pnpm exec wrangler deploy
 
       - name: Deploy media
@@ -357,6 +366,18 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
         run: |
           printf '%s' "${ACCESS_AUD}" | pnpm exec wrangler secret put ACCESS_AUD
+
+      - name: Set api runtime secrets
+        working-directory: workers/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.HB_DEPLOY_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+        run: |
+          # Piped, never echoed. Setting this from state rather than by hand
+          # removes a copy-paste step from intake switch-on and the chance of a
+          # secret being pasted somewhere it is logged. The api still refuses
+          # every write while document_intake is OFF.
+          printf '%s' "${TURNSTILE_SECRET}" | pnpm exec wrangler secret put TURNSTILE_SECRET
 
       - name: Smoke test (public up; console never open)
         env:

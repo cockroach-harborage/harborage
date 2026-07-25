@@ -36,3 +36,19 @@ output "access_console_aud" {
   value     = cloudflare_zero_trust_access_application.console.aud
   sensitive = true
 }
+
+# Public by design: the sitekey is embedded in the page. Flows to the api Worker
+# as a var, and reaches the client through GET /api/intake/status alongside the
+# intake public key, so no prerendered page needs a build-time substitution.
+output "turnstile_sitekey" {
+  value       = cloudflare_turnstile_widget.document_intake.sitekey
+  description = "Turnstile sitekey for the document-intake widget."
+}
+
+# The verification secret. Marked sensitive so it is never printed in a log or a
+# plan summary; the deploy job pipes it straight into `wrangler secret put`.
+output "turnstile_secret" {
+  value       = cloudflare_turnstile_widget.document_intake.secret
+  description = "Turnstile secret for siteverify."
+  sensitive   = true
+}

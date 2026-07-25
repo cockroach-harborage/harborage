@@ -136,3 +136,26 @@ manual steps first (each is a readiness gate, not a code change):
 | Add zizmor / gitleaks / tofu-validate to required checks | They run on every PR but are not required contexts, so a PR failing the Actions-security audit or secret scanning can still merge. |
 
 Everything else — `tofu apply`, `wrangler deploy`, D1 migrations, secret injection, config templating, DNS/Access/Turnstile/WAF provisioning, cache warming, CI gates, smoke tests — is automated.
+
+## Turnstile widget (Terraform-managed since M3)
+
+The widget is `infra/turnstile.tf` (`cloudflare_turnstile_widget.document_intake`,
+Managed mode, domain = the zone). Nothing here is a manual click.
+
+**One-time prerequisite, done 2026-07-25:** `HB_TERRAFORM_TOKEN` needs
+**`Turnstile:Edit`** on the account. Without it `tofu apply` fails and blocks
+that deploy and every one after it.
+
+The sitekey and secret both come out of Terraform state:
+
+- **sitekey** is public. It flows to `workers/api` as the `TURNSTILE_SITEKEY`
+  var via the `REPLACE_TURNSTILE_SITEKEY` substitution in `deploy.yml`, and
+  reaches the client from `GET /api/intake/status`. No prerendered page needs a
+  build-time substitution.
+- **secret** is piped straight into `wrangler secret put TURNSTILE_SECRET` by
+  the deploy job, masked, never echoed. There is no manual copy step, which is
+  one fewer place a secret can be pasted somewhere it gets logged.
+
+Both are fail-closed: an absent or unreplaced sitekey means the client renders
+no widget and hides the send affordance, and the api Worker refuses the write
+regardless while `document_intake` is OFF.

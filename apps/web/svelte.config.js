@@ -24,18 +24,26 @@ const config = {
 			mode: 'auto',
 			directives: {
 				'default-src': ['none'],
-				'script-src': ['self'],
+				// Turnstile's api.js can only be loaded from challenges.cloudflare.com
+				// (the docs are explicit that the exact URL is required). Adding a
+				// third-party origin to script-src on a browser-crypto PWA is a real
+				// weakening and is stated as one: that origin can execute in our page.
+				// It is accepted because the alternative is no personhood check at all
+				// in front of intake, and it is scoped to ONE exact host with no
+				// wildcard. The widget renders in an iframe from the same host, hence
+				// frame-src.
+				'script-src': ['self', 'https://challenges.cloudflare.com'],
 				'style-src': ['self'],
 				'img-src': ['self', 'blob:', 'data:'],
 				'font-src': ['self'],
-				'connect-src': ['self', 'https://*.r2.cloudflarestorage.com'],
+				'connect-src': ['self', 'https://*.r2.cloudflarestorage.com', 'https://challenges.cloudflare.com'],
 				'worker-src': ['self'],
 				'manifest-src': ['self'],
 				'media-src': ['self', 'blob:'],
 				'object-src': ['none'],
 				'base-uri': ['none'],
 				'form-action': ['none'],
-				'frame-src': ['none'],
+				'frame-src': ['https://challenges.cloudflare.com'],
 				'frame-ancestors': ['none'],
 				'require-trusted-types-for': ['script'],
 				// Allowlisting policy NAMES is stronger than requiring Trusted Types
@@ -45,7 +53,16 @@ const config = {
 				// (Kit refuses to build without either); 'default' is the narrow
 				// createScriptURL-only policy in lib/pipeline/pipeline-client.ts that
 				// lets the capture Web Worker be constructed.
-				'trusted-types': ['svelte-trusted-html', 'sveltekit-trusted-url', 'default']
+				'trusted-types': [
+					'svelte-trusted-html',
+					'sveltekit-trusted-url',
+					'default',
+					// One-output policy for the Turnstile script URL. `.src` is a
+					// TrustedScriptURL sink and the `default` policy above rejects
+					// cross-origin URLs by design, so Turnstile needs its own; it
+					// ignores its argument and returns one hardcoded constant.
+					'turnstile-script'
+				]
 			}
 		},
 		prerender: {

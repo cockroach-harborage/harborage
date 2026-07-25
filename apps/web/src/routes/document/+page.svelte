@@ -3,6 +3,7 @@
 	import { m } from '$lib/paraglide/messages.js';
 	import { localizeHref } from '$lib/paraglide/runtime';
 	import Icon from '$lib/components/Icon.svelte';
+	import TurnstileWidget from '$lib/components/TurnstileWidget.svelte';
 	import { documents, type LocalDocument } from '$lib/documents';
 	import { incidentTypeLabel } from '$lib/incident-types';
 	import { getIntakeStatus, sendRecord } from '$lib/uploads';
@@ -15,6 +16,14 @@
 	let canSend = $state(false);
 	let sendingId = $state<string | null>(null);
 	let sendMsg = $state('');
+	/**
+	 * Sitekey and token for the personhood check. Sending needs BOTH the flag and
+	 * a solved challenge: the api Worker has required a `cf-turnstile-response`
+	 * header since M1, so an affordance that ignores it is a button that always
+	 * fails.
+	 */
+	let sitekey = $state<string | null>(null);
+	let turnstileToken = $state('');
 
 	const kindIcon: Record<string, string> = { photo: 'camera', note: 'book', audio: 'phone' };
 
@@ -26,7 +35,7 @@
 			sendingId = null;
 			return;
 		}
-		const outcome = await sendRecord(fresh, new IdbOutboxStore(), fetch);
+		const outcome = await sendRecord(fresh, new IdbOutboxStore(), fetch, turnstileToken);
 		if (outcome === 'sent') {
 			fresh.sent = true;
 			await documents.put(fresh);
@@ -65,7 +74,11 @@
 
 	onMount(async () => {
 		await reload();
-		canSend = (await getIntakeStatus()).document_intake;
+		const status = await getIntakeStatus();
+		sitekey = status.turnstile_sitekey;
+		// No sitekey means no challenge can be solved, so the send would be
+		// refused. Hide the control rather than offer one that cannot work.
+		canSend = status.document_intake && sitekey !== null;
 	});
 	onDestroy(() => {
 		for (const url of thumbs.values()) URL.revokeObjectURL(url);
@@ -108,7 +121,7 @@
 					<button
 						type="button"
 						class="rec-send"
-						disabled={sendingId === r.id}
+						disabled={sendingId === r.id || turnstileToken === ''}
 						onclick={() => handleSend(r)}>{sendingId === r.id ? m.sending() : m.send_archive()}</button
 					>
 				{/if}
@@ -118,6 +131,18 @@
 			</div>
 		{/each}
 	</div>
+	<!-- One widget for the whole list, not one per row: a single challenge is
+	     solved once and its token spent on the next send. Rendered only when a
+	     sitekey exists, and the send stays disabled until a token arrives. -->
+	{#if canSend && sitekey}
+		<div class="check">
+			<p class="muted">{m.turnstile_check()}</p>
+			<TurnstileWidget {sitekey} bind:token={turnstileToken} />
+			{#if turnstileToken === ''}
+				<p class="muted">{m.turnstile_wait()}</p>
+			{/if}
+		</div>
+	{/if}
 	{#if sendMsg}
 		<p class="muted" role="status">{sendMsg}</p>
 	{/if}

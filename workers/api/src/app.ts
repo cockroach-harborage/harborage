@@ -287,8 +287,27 @@ app.get('/api/intake/status', async (c) => {
 		typeof c.env.INTAKE_PUBLIC_KEY === 'string' && /^[0-9a-f]{64}$/.test(c.env.INTAKE_PUBLIC_KEY)
 			? c.env.INTAKE_PUBLIC_KEY
 			: null;
+	// The Turnstile sitekey. Public by construction — it is embedded in the page
+	// — so it rides the same open endpoint as the intake public key rather than
+	// forcing a build-time substitution into prerendered HTML.
+	//
+	// Absent ⇒ null ⇒ the client renders no widget and hides the send
+	// affordance. Fail-closed, and the Worker refuses the write regardless: this
+	// only decides whether the user is shown a control that cannot work.
+	const sitekey =
+		typeof c.env.TURNSTILE_SITEKEY === 'string' &&
+		/^[A-Za-z0-9_-]{8,64}$/.test(c.env.TURNSTILE_SITEKEY) &&
+		// An unreplaced CI placeholder must read as "no sitekey", not as one.
+		!c.env.TURNSTILE_SITEKEY.startsWith('REPLACE_')
+			? c.env.TURNSTILE_SITEKEY
+			: null;
 	return c.json(
-		{ document_intake: recordIntake, directory_intake: directoryIntake, intake_key: intakeKey },
+		{
+			document_intake: recordIntake,
+			directory_intake: directoryIntake,
+			intake_key: intakeKey,
+			turnstile_sitekey: sitekey
+		},
 		200,
 		{ 'cache-control': 'public, max-age=30' }
 	);
