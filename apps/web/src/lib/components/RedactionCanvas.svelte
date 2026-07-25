@@ -2,14 +2,39 @@
 	import { onMount } from 'svelte';
 	import { m } from '$lib/paraglide/messages.js';
 	import type { Box } from '$lib/pipeline/pipeline-client';
+	import { HEADER_PROBE_BYTES, readImageDimensions } from '$lib/pipeline/image-header';
+	import { scaledSize } from '$lib/pipeline/derivative-core';
 
-	let { imageBlob, boxes = $bindable([] as Box[]) }: { imageBlob: Blob; boxes?: Box[] } = $props();
+	/**
+	 * GEOMETRY EDITOR ONLY (ARCHITECTURE §19:1216).
+	 *
+	 * This component no longer decides what the public copy looks like. It
+	 * collects normalized box coordinates on a small working copy; the worker
+	 * bakes them into pixels once, at the final derivative resolution, and the
+	 * human confirms THOSE bytes on the next screen. Previously the toggle here
+	 * was the whole before/after confirm, which meant the user approved a
+	 * display copy and something else shipped.
+	 */
+	let {
+		imageBlob,
+		boxes = $bindable([] as Box[]),
+		decodeFailed = $bindable(false)
+	}: { imageBlob: Blob; boxes?: Box[]; decodeFailed?: boolean } = $props();
 
 	let canvasEl: HTMLCanvasElement;
 	let bitmap: ImageBitmap | null = null;
 	let showCovered = $state(true);
-	let decodeFailed = $state(false);
 	let drag: { x0: number; y0: number; x1: number; y1: number } | null = $state(null);
+	/**
+	 * Decoding a multi-MB capture takes real time on a cheap phone, and until it
+	 * finishes a drag silently does nothing. Announce that rather than looking
+	 * broken: `aria-busy` tells a screen reader, and the visible hint tells
+	 * everyone else.
+	 */
+	let ready = $state(false);
+
+	/** Working-copy width. Big enough to aim at a face, small enough not to OOM. */
+	const PREVIEW_MAX = 1024;
 
 	function redraw() {
 		if (!canvasEl || !bitmap) return;
@@ -20,7 +45,12 @@
 		ctx.fillStyle = '#000000';
 		if (showCovered) {
 			for (const b of boxes) {
-				ctx.fillRect(b.x * canvasEl.width, b.y * canvasEl.height, b.w * canvasEl.width, b.h * canvasEl.height);
+				ctx.fillRect(
+					b.x * canvasEl.width,
+					b.y * canvasEl.height,
+					b.w * canvasEl.width,
+					b.h * canvasEl.height
+				);
 			}
 		}
 		if (drag) {
@@ -61,7 +91,12 @@
 		if (w > 6 && h > 6) {
 			boxes = [
 				...boxes,
-				{ x: x / canvasEl.width, y: y / canvasEl.height, w: w / canvasEl.width, h: h / canvasEl.height }
+				{
+					x: x / canvasEl.width,
+					y: y / canvasEl.height,
+					w: w / canvasEl.width,
+					h: h / canvasEl.height
+				}
 			];
 		}
 		redraw();
@@ -82,9 +117,31 @@
 		redraw();
 	});
 
+	/**
+	 * Decode a SCALED working copy. The old code called `createImageBitmap(blob)`
+	 * with no options, which fully decodes a 12-108 MP capture into RGBA on the
+	 * main thread — hundreds of megabytes on a 1-2 GB phone. Dimensions come from
+	 * the file header first so the scale factor is known before any pixels exist.
+	 */
+	async function decodePreview(blob: Blob): Promise<ImageBitmap> {
+		const head = new Uint8Array(await blob.slice(0, HEADER_PROBE_BYTES).arrayBuffer());
+		const intrinsic = readImageDimensions(head);
+		if (!intrinsic) return createImageBitmap(blob);
+		const size = scaledSize(intrinsic.width, intrinsic.height, PREVIEW_MAX);
+		try {
+			return await createImageBitmap(blob, {
+				resizeWidth: size.width,
+				resizeHeight: size.height,
+				resizeQuality: 'high'
+			});
+		} catch {
+			return createImageBitmap(blob);
+		}
+	}
+
 	onMount(() => {
 		let revoked = false;
-		createImageBitmap(imageBlob)
+		decodePreview(imageBlob)
 			.then((bm) => {
 				if (revoked) {
 					bm.close();
@@ -95,10 +152,12 @@
 				canvasEl.width = maxW;
 				canvasEl.height = Math.round((bm.height / bm.width) * maxW);
 				redraw();
+				ready = true;
 			})
 			.catch(() => {
-				// An unreadable image must not crash the flow; the user can still keep
-				// it private (sealed, byte-for-byte) or pick another photo.
+				// An unreadable image must not crash the flow, and must not let the
+				// user "continue" either: the parent disables the public-copy path on
+				// this flag, so the capture falls closed to vault-only.
 				decodeFailed = true;
 			});
 		return () => {
@@ -119,8 +178,11 @@
 		onpointermove={onPointerMove}
 		onpointerup={onPointerUp}
 		aria-label={m.redact_canvas_label()}
+		aria-busy={!ready && !decodeFailed}
 	></canvas>
-	<p class="muted redact-hint" class:hidden={decodeFailed}>{m.redact_hint()}</p>
+	<p class="muted redact-hint" class:hidden={decodeFailed}>
+		{ready || decodeFailed ? m.redact_hint() : m.processing()}
+	</p>
 	<div class="redact-controls">
 		<button type="button" class="btn-quiet" onclick={() => (showCovered = !showCovered)}>
 			{showCovered ? m.redact_show_original() : m.redact_show_covered()}
