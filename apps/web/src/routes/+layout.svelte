@@ -8,6 +8,7 @@
 	import { network, watchNetwork } from '$lib/offline.svelte.ts';
 	import { outbox, watchOutbox } from '$lib/outbox-view.svelte.ts';
 	import { startOutboxRunner } from '$lib/outbox-runner';
+	import { forgetBriefing } from '$lib/briefing.svelte';
 
 	let { children } = $props();
 
@@ -35,7 +36,12 @@
 			label: m.nav_stay_safe(),
 			active: path.startsWith('/stay-safe')
 		},
-		{ href: '/document', icon: 'camera', label: m.nav_document(), active: path.startsWith('/document') },
+		{
+			href: '/document',
+			icon: 'camera',
+			label: m.nav_document(),
+			active: path.startsWith('/document')
+		},
 		{ href: '/nearby', icon: 'compass', label: m.nav_nearby(), active: path.startsWith('/nearby') },
 		{
 			href: '/directory',
@@ -59,6 +65,9 @@
 		} catch {
 			/* storage may be unavailable; still navigate */
 		}
+		// Drop any safety-briefing acknowledgement, so Close never leaves a compose
+		// form one tap away.
+		forgetBriefing();
 		location.replace(localizeHref('/directory'));
 	}
 

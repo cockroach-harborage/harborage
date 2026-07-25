@@ -47,6 +47,46 @@ export function fail(gate, problems) {
 }
 
 /**
+ * Strip comments, for checks about what code DOES.
+ *
+ * The distinction matters and this repo has got it wrong in both directions.
+ * A check like "this module must not reference localStorage" is about behaviour,
+ * so a doc comment explaining that it deliberately does not use localStorage
+ * must not trip it — otherwise every author reaches the same trap and the fix is
+ * always to weaken the prose. Conversely gate-ai-tells scans message files
+ * WITHOUT stripping, because there a comment is content, and gate-sealed-body
+ * scans binding names in comments deliberately.
+ *
+ * Rule of thumb: strip for "must not reference", scan for "must not contain".
+ */
+export function stripComments(text) {
+	return text.replaceAll(/\/\*[\s\S]*?\*\//g, '').replaceAll(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+/**
+ * Blank out comments while PRESERVING every offset.
+ *
+ * For checks that compute character ranges — gate-jit-briefing places each send
+ * affordance inside or outside an acknowledgement guard — stripping comments
+ * outright would shift every offset and quietly corrupt the ranges, and the
+ * reported positions would stop matching the file. Replacing comment bytes with
+ * spaces (newlines kept, so line numbers survive) gives the same blindness to
+ * comments with none of that risk.
+ *
+ * Covers JS block and line comments plus HTML/Svelte comments, because a Svelte
+ * template can carry either and a comment mentioning `<form>` is exactly how
+ * this bit me: a fixture's own explanation of what it does NOT contain tripped
+ * the rule it was demonstrating.
+ */
+export function blankComments(text) {
+	const blank = (m) => m.replaceAll(/[^\n]/g, ' ');
+	return text
+		.replaceAll(/\/\*[\s\S]*?\*\//g, blank)
+		.replaceAll(/<!--[\s\S]*?-->/g, blank)
+		.replaceAll(/(^|[^:])\/\/[^\n]*/gm, (m, p1) => p1 + blank(m.slice(p1.length)));
+}
+
+/**
  * Split Hono router source into one region per route handler.
  *
  * WHY THIS EXISTS. Several gates need to assert that a guard runs INSIDE a

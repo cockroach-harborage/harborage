@@ -1,0 +1,9 @@
+{
+	"comment": "Compose surfaces that must show a just-in-time safety briefing before any send affordance exists (PRD §4.7–4.9). The briefing is a precondition, not fine print: somebody about to ask a stranger for help, or about to go and meet one, reads the risks AT THAT MOMENT.",
+	"absent_not_disabled_comment": "The rule is that the form is ABSENT FROM THE DOM until acknowledged, not disabled and not hidden. A disabled button is still a button, re-enabled from a console in one line, and `toBeHidden()` passes for an element that does not exist so it cannot tell the two apart. gate-jit-briefing computes the character ranges of the acknowledgement guards and requires every form and send affordance to fall inside one.",
+	"honest_boundary_comment": "The Worker cannot verify a briefing was shown without recording that it was, and that record is the kind this platform refuses to hold. So the gate is CLIENT-SIDE ONLY and the platform keeps no proof. What it buys is that the app cannot present a compose form without the briefing first, which is a property of the app rather than a claim about the person using it.",
+	"routes": [
+		{ "route": "apps/web/src/routes/get-help/aid/+page.svelte", "topic": "aid_need" },
+		{ "route": "apps/web/src/routes/give-help/offer/+page.svelte", "topic": "aid_offer" }
+	]
+}

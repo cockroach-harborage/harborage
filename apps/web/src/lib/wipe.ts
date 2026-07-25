@@ -17,6 +17,7 @@ import { documents } from '$lib/documents';
 import { closeIdentityDb, wipe as wipeIdentity } from '$lib/identity';
 import { closeIntakeKeyDb } from '$lib/intake-key';
 import { haltOutbox } from '$lib/outbox-runner';
+import { forgetBriefing } from '$lib/briefing.svelte';
 import { databasesToDelete, type WipeScope } from '$lib/wipe-core';
 
 export interface WipeReport {
@@ -64,6 +65,9 @@ function deleteDatabase(name: string): Promise<boolean> {
 }
 
 export async function wipeDevice(scope: WipeScope): Promise<WipeReport> {
+	// A briefing acknowledgement is memory-only and would die with the tab anyway,
+	// but an erase must not leave a screen one tap from a compose form.
+	forgetBriefing();
 	// Stop the runner first, and wait for it to release its connection. A
 	// visibilitychange between clearing a store and deleting its database would
 	// otherwise reopen what we just cleared, and a connection left open makes

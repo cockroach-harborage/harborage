@@ -24,6 +24,21 @@
 				"max_retries": 3,
 				"dead_letter_queue": "moderation-bulk-dlq",
 				"max_concurrency": 4
+			},
+			// The life-safety lane. Its own DLQ, its own concurrency, and a batch
+			// size of ONE: a poison message must not delay a neighbour on a lane
+			// whose whole purpose is that it is never behind anything.
+			//
+			// More retries than moderation-bulk, because reaching the DLQ is how an
+			// operator finds out at all. There is no other channel: this lane
+			// deliberately writes nothing to D1.
+			{
+				"queue": "life-safety",
+				"max_batch_size": 1,
+				"max_batch_timeout": 1,
+				"max_retries": 5,
+				"dead_letter_queue": "life-safety-dlq",
+				"max_concurrency": 10
 			}
 		]
 	},
