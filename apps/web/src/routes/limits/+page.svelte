@@ -41,6 +41,9 @@
 		// and false of the note, which is destined for the public record.
 		() => m.limits_7a(),
 		() => m.limits_7b(),
+		// The metadata envelope is sealed to a key we hold. Saying only that it is
+		// "sealed" would read as end-to-end, which it is not.
+		() => m.limits_7c(),
 		() => m.limits_8(),
 		() => m.limits_9(),
 		() => m.limits_10(),

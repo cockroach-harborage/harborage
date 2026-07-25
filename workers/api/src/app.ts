@@ -228,9 +228,23 @@ app.get('/api/intake/status', async (c) => {
 		featureAvailable(c.env.FLAGS, 'document_intake', { disabledUnderHeightenedThreat: true }),
 		featureAvailable(c.env.FLAGS, 'directory_intake', { disabledUnderHeightenedThreat: true })
 	]);
-	return c.json({ document_intake: recordIntake, directory_intake: directoryIntake }, 200, {
-		'cache-control': 'public, max-age=30'
-	});
+	// The PUBLIC half of the intake sealed-box keypair. Publishing it is the
+	// point: a client seals the metadata envelope to it before sending. It is
+	// deliberately not pinned into the app shell, because the shell is served
+	// from this same edge (§9.5) so pinning would add no protection an attacker
+	// who can swap this value could not also defeat. The client pins on first
+	// use and warns on change, which is the honest bound.
+	//
+	// Absent ⇒ no key is published and the client refuses to send. Fail-closed.
+	const intakeKey =
+		typeof c.env.INTAKE_PUBLIC_KEY === 'string' && /^[0-9a-f]{64}$/.test(c.env.INTAKE_PUBLIC_KEY)
+			? c.env.INTAKE_PUBLIC_KEY
+			: null;
+	return c.json(
+		{ document_intake: recordIntake, directory_intake: directoryIntake, intake_key: intakeKey },
+		200,
+		{ 'cache-control': 'public, max-age=30' }
+	);
 });
 
 app.notFound((c) => c.text('not found', 404));

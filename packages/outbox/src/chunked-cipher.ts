@@ -14,7 +14,7 @@
  * (tests / small bodies) adapt stored ciphertext to the CipherSource the uploader
  * slices.
  */
-import { seal } from '@harborage/crypto';
+import { open, seal } from '@harborage/crypto';
 import type { CipherSource } from './types.ts';
 import { PART_SIZE } from './types.ts';
 
@@ -65,6 +65,64 @@ export function sealChunks(
 		chunks.push(seal(key, plaintext.subarray(start, end), chunkAad(fileBase, i, total, isFinal)));
 	}
 	return chunks;
+}
+
+/**
+ * Reconstruct the plaintext from concatenated sealed chunks.
+ *
+ * Until this existed nothing could rebuild a vaulted original: sealChunks had
+ * no inverse anywhere in the codebase, so the sealed pristine copy on someone's
+ * phone was write-only.
+ *
+ * `total` is DERIVED from the ciphertext length, never taken from a caller.
+ * That is the whole integrity property here: the AAD binds each chunk's index
+ * and the total, so an attacker who drops trailing chunks would, if `total`
+ * were caller-supplied, be able to lower it to match and every remaining chunk
+ * would still authenticate. Deriving it means a truncated blob computes a
+ * smaller `total`, every chunk's AAD then mismatches, and the open fails.
+ *
+ * Returns null on any failure rather than throwing: a corrupt or tampered blob
+ * is an expected outcome for data that has survived a phone and a flaky link.
+ */
+export function openChunks(
+	key: Uint8Array,
+	cipher: Uint8Array,
+	fileBase: Uint8Array,
+	chunkPlain: number = CHUNK_PLAIN
+): Uint8Array | null {
+	const sealedChunk = chunkPlain + SEAL_OVERHEAD;
+	if (cipher.length <= SEAL_OVERHEAD) return null;
+
+	// Every non-final chunk is exactly sealedChunk bytes; the final one is the
+	// remainder. A blob whose length implies a zero-length final chunk is
+	// malformed, not merely empty.
+	const full = Math.floor(cipher.length / sealedChunk);
+	const remainder = cipher.length - full * sealedChunk;
+	const total = remainder === 0 ? full : full + 1;
+	if (total === 0) return null;
+	if (remainder !== 0 && remainder <= SEAL_OVERHEAD) return null;
+
+	const parts: Uint8Array[] = [];
+	for (let i = 0; i < total; i++) {
+		const start = i * sealedChunk;
+		const end = Math.min(start + sealedChunk, cipher.length);
+		const isFinal = i === total - 1;
+		try {
+			parts.push(open(key, cipher.subarray(start, end), chunkAad(fileBase, i, total, isFinal)));
+		} catch {
+			return null;
+		}
+	}
+
+	let size = 0;
+	for (const p of parts) size += p.length;
+	const out = new Uint8Array(size);
+	let off = 0;
+	for (const p of parts) {
+		out.set(p, off);
+		off += p.length;
+	}
+	return out;
 }
 
 /** Concatenate sealed chunks into a single cipher buffer. */

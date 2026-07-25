@@ -1,0 +1,13 @@
+{
+	"endpoints": [
+		{
+			"endpoint": "POST /api/things/register",
+			"class": "SEALED-E2E",
+			"note": "Fixture endpoint for gate-selftest.",
+			"platform_key": {
+				"binding": "INTAKE_PRIVATE_KEY",
+				"why": "Private half of the intake sealed-box keypair, held only by the consumer, which is the sole reader of the metadata envelope."
+			}
+		}
+	]
+}

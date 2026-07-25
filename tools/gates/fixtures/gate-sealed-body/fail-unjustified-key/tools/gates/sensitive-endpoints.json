@@ -1,0 +1,13 @@
+{
+	"endpoints": [
+		{
+			"endpoint": "POST /api/things/register",
+			"class": "SEALED-TO-PLATFORM",
+			"note": "Fixture endpoint for gate-selftest.",
+			"platform_key": {
+				"binding": "INTAKE_PRIVATE_KEY",
+				"why": "needed"
+			}
+		}
+	]
+}
