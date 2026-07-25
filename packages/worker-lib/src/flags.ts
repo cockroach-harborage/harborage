@@ -42,7 +42,12 @@ export const FLAG_NAMES = [
 	'archive_publish',
 	// Fingerprint-and-reference of off-platform media. There is no fetch path and
 	// no URL is stored; switch-on is the counsel-gated source ToS question.
-	'source_import'
+	'source_import',
+	// The brokered mutual-aid channel. Off means every /api/aid/* route refuses
+	// and no Broker or Mailbox instance is ever created. Switch-on additionally
+	// waits on BROKER_INBOX_MAC_KEY existing and on briefing and broker humans,
+	// neither of which a flag can supply.
+	'aid_broker'
 ] as const;
 
 export type FlagName = (typeof FLAG_NAMES)[number];
