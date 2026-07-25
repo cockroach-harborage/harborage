@@ -116,8 +116,22 @@ export class LiveBoard extends DurableObject {
 	async report(input: {
 		zoneId: string;
 		signal: SignalType;
-		/** HMAC(per-(zone,epoch) salt, certHashHex). Computed by the caller. */
-		dedupToken: Uint8Array;
+		/**
+		 * The requesting credential's certificate hash, hex.
+		 *
+		 * THE ROUTE PASSES THIS, NOT A TOKEN. An earlier version had the caller
+		 * compute HMAC(salt, certHashHex), which meant handing the route the epoch
+		 * salt — and the salt is the ONE thing that makes the sketch more than a
+		 * reversible index. Anyone holding it and a candidate credential can test
+		 * that credential's register, so it must never leave this instance. The
+		 * derivation moved inside.
+		 *
+		 * certHashHex rather than a client-supplied seed, because a client that
+		 * chose its own seed could mint unlimited apparent reporters with a fresh
+		 * value per heartbeat and defeat the density floor and the corroboration
+		 * bar entirely. §6.3 says `reporter_session`; this is the correction.
+		 */
+		certHashHex: string;
 		marshalValid?: boolean;
 		nowMs?: number;
 	}): Promise<'accepted'> {
@@ -126,7 +140,8 @@ export class LiveBoard extends DurableObject {
 		await this.rotateIfDue(nowMs);
 		this.expire(nowMs);
 
-		insert(this.density, input.dedupToken);
+		const dedupToken = await this.dedupToken(input.certHashHex);
+		insert(this.density, dedupToken);
 
 		let state = this.signals.get(input.signal);
 		if (!state) {
@@ -139,7 +154,7 @@ export class LiveBoard extends DurableObject {
 			};
 			this.signals.set(input.signal, state);
 		}
-		insert(state.sketch, input.dedupToken);
+		insert(state.sketch, dedupToken);
 		// A quorum, once verified by the ingest route, is sticky for the life of
 		// the signal. It is never un-set by a later unquorumed report, because that
 		// would let one unsigned report suppress a marshal-attested SAFE_EXIT.
@@ -345,10 +360,32 @@ export class LiveBoard extends DurableObject {
 		}
 	}
 
-	/** The salt, for the ingest route to derive a dedup token. Never leaves the DO. */
-	async currentEpoch(nowMs = Date.now()): Promise<{ epoch: number; salt: Uint8Array }> {
-		await this.rotateIfDue(nowMs);
-		return { epoch: this.epochIndex, salt: this.salt };
+	/**
+	 * dedup_token = HMAC(per-(zone, epoch) memory salt, certHashHex).
+	 *
+	 * PRIVATE, and there is deliberately no accessor for the salt. It is the one
+	 * thing that makes the sketch more than a reversible index: with it, anyone
+	 * holding a candidate credential can compute that credential's register and
+	 * test membership. It is generated here, never persisted, never logged, and
+	 * never returned.
+	 *
+	 * HONEST CEILING, and it belongs in the limits copy: one Turnstile-passing
+	 * cap-cert is one reporter, so the density floor is exactly as strong as
+	 * personhood-lite plus the rate ladder and NO STRONGER. It protects a small
+	 * group from a casual observer or an accident. It does not protect them from
+	 * an adversary who mints five credentials, which is the same wall §15 already
+	 * admits a state can climb.
+	 */
+	private async dedupToken(certHashHex: string): Promise<Uint8Array> {
+		const key = await crypto.subtle.importKey(
+			'raw',
+			this.salt as BufferSource,
+			{ name: 'HMAC', hash: 'SHA-256' },
+			false,
+			['sign']
+		);
+		const message = new TextEncoder().encode(certHashHex);
+		return new Uint8Array(await crypto.subtle.sign('HMAC', key, message as BufferSource));
 	}
 
 	/** Distinct-reporter lower bound, for tests only. Never reachable from a route. */

@@ -56,7 +56,14 @@ export const FLAG_NAMES = [
 	// Helper offers and the published capacity band. Off means no offer is
 	// accepted and the read returns "not published" rather than NONE: absence is
 	// not a claim, and NONE is.
-	'helper_registry'
+	'helper_registry',
+	// The zone-level live board. Writes fail CLOSED; READS use
+	// disabledUnderHeightenedThreat: false, because heightened threat TIGHTENS
+	// thresholds and must never blind people to TEAR_GAS (§6.5).
+	'live_board',
+	// Crowd bands only. Disabled ENTIRELY under heightened threat per §6.4, which
+	// is why it is a separate flag rather than part of live_board.
+	'crowd_bands'
 ] as const;
 
 export type FlagName = (typeof FLAG_NAMES)[number];

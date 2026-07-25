@@ -26,15 +26,21 @@ function newBoard(): LiveBoard {
 	return new (LiveBoard as unknown as new () => LiveBoard)();
 }
 
-/** A distinct dedup token per reporter. */
-function tok(i: number): Uint8Array {
-	const t = new Uint8Array(32);
+/**
+ * A distinct certificate hash per reporter.
+ *
+ * The DO derives the dedup token itself, because the epoch salt must never leave
+ * it. Tests therefore vary the CREDENTIAL, which is also what the real ingest
+ * route varies.
+ */
+function tok(i: number): string {
+	let s = '';
 	let x = (i * 2654435761 + 999) >>> 0;
 	for (let b = 0; b < 32; b++) {
 		x = (x * 1103515245 + 12345) >>> 0;
-		t[b] = (x >>> 16) & 0xff;
+		s += ((x >>> 16) & 0xff).toString(16).padStart(2, '0');
 	}
-	return t;
+	return s;
 }
 
 async function reportN(
@@ -45,7 +51,7 @@ async function reportN(
 	from = 0
 ) {
 	for (let i = 0; i < n; i++) {
-		await board.report({ zoneId: ZONE, signal, dedupToken: tok(i + from), nowMs: at });
+		await board.report({ zoneId: ZONE, signal, certHashHex: tok(i + from), nowMs: at });
 	}
 }
 
@@ -76,15 +82,15 @@ describe('report() is not an oracle', () => {
 			const b = newBoard();
 			await reportN(b, n, T0);
 			seen.add(
-				await b.report({ zoneId: ZONE, signal: 'TEAR_GAS', dedupToken: tok(999), nowMs: T0 })
+				await b.report({ zoneId: ZONE, signal: 'TEAR_GAS', certHashHex: tok(999), nowMs: T0 })
 			);
 		}
 		expect(seen.size).toBe(1);
 		expect([...seen][0]).toBe('accepted');
 		// And a duplicate token is indistinguishable from a fresh one.
-		await board.report({ zoneId: ZONE, signal: 'TEAR_GAS', dedupToken: tok(1), nowMs: T0 });
+		await board.report({ zoneId: ZONE, signal: 'TEAR_GAS', certHashHex: tok(1), nowMs: T0 });
 		expect(
-			await board.report({ zoneId: ZONE, signal: 'TEAR_GAS', dedupToken: tok(1), nowMs: T0 })
+			await board.report({ zoneId: ZONE, signal: 'TEAR_GAS', certHashHex: tok(1), nowMs: T0 })
 		).toBe('accepted');
 	});
 
@@ -93,7 +99,7 @@ describe('report() is not an oracle', () => {
 		const r = await board.report({
 			zoneId: ZONE,
 			signal: 'TEAR_GAS',
-			dedupToken: tok(0),
+			certHashHex: tok(0),
 			nowMs: T0
 		});
 		expect(typeof r).toBe('string');
@@ -118,7 +124,7 @@ describe('the density floor, through the class', () => {
 	it('counts a repeated reporter once, so one person cannot cross the floor alone', async () => {
 		const board = newBoard();
 		for (let i = 0; i < 50; i++) {
-			await board.report({ zoneId: ZONE, signal: 'TEAR_GAS', dedupToken: tok(7), nowMs: T0 });
+			await board.report({ zoneId: ZONE, signal: 'TEAR_GAS', certHashHex: tok(7), nowMs: T0 });
 		}
 		expect(await board.densityForTest(T0)).toBe(1);
 		expect((await board.view({ nowMs: T0 + PUBLISHED })).signals).toHaveLength(0);
@@ -251,7 +257,7 @@ describe('SAFE_EXIT needs a quorum, through the class', () => {
 	it('withholds a SAFE_EXIT reported without a quorum', async () => {
 		const board = newBoard();
 		for (let i = 0; i < DENSITY_FLOOR_D; i++) {
-			await board.report({ zoneId: ZONE, signal: 'SAFE_EXIT', dedupToken: tok(i), nowMs: T0 });
+			await board.report({ zoneId: ZONE, signal: 'SAFE_EXIT', certHashHex: tok(i), nowMs: T0 });
 		}
 		const view = await board.view({ nowMs: T0 + PUBLISHED });
 		expect(view.signals.find((s) => s.signal === 'SAFE_EXIT')).toBeUndefined();
@@ -263,7 +269,7 @@ describe('SAFE_EXIT needs a quorum, through the class', () => {
 			await board.report({
 				zoneId: ZONE,
 				signal: 'SAFE_EXIT',
-				dedupToken: tok(i),
+				certHashHex: tok(i),
 				marshalValid: true,
 				nowMs: T0
 			});
@@ -286,12 +292,12 @@ describe('SAFE_EXIT needs a quorum, through the class', () => {
 			await board.report({
 				zoneId: ZONE,
 				signal: 'SAFE_EXIT',
-				dedupToken: tok(i),
+				certHashHex: tok(i),
 				marshalValid: true,
 				nowMs: T0
 			});
 		}
-		await board.report({ zoneId: ZONE, signal: 'SAFE_EXIT', dedupToken: tok(99), nowMs: T0 });
+		await board.report({ zoneId: ZONE, signal: 'SAFE_EXIT', certHashHex: tok(99), nowMs: T0 });
 		expect(
 			(await board.view({ nowMs: T0 + PUBLISHED })).signals.find((x) => x.signal === 'SAFE_EXIT')
 		).toBeDefined();
