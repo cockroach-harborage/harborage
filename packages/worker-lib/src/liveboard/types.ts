@@ -35,6 +35,19 @@ export type SignalType = (typeof SIGNAL_TYPES)[number];
  */
 export const QUORUM_REQUIRED: readonly SignalType[] = ['SAFE_EXIT', 'DISPERSAL'];
 
+/**
+ * What an ordinary reporter may send.
+ *
+ * DERIVED, never listed. A quorum signal offered on a compose surface collects
+ * reports the ingest route refuses, which teaches people the app is broken and
+ * teaches nobody why. Deriving it means a signal added to QUORUM_REQUIRED later
+ * disappears from every picker without anyone remembering to remove it — the
+ * failure of a hand-maintained second list is silent and in the unsafe direction.
+ */
+export const REPORTABLE_SIGNALS: readonly SignalType[] = SIGNAL_TYPES.filter(
+	(s) => !QUORUM_REQUIRED.includes(s)
+);
+
 export function requiresQuorum(signal: SignalType): boolean {
 	return QUORUM_REQUIRED.includes(signal);
 }

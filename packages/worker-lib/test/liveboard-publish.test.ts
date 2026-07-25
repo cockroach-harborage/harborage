@@ -6,7 +6,12 @@ import {
 	PUBLICATION_DELAY_BASE_MS,
 	PUBLICATION_JITTER_MAX_MS
 } from '../src/liveboard/params.ts';
-import { SIGNAL_TYPES, type SignalType } from '../src/liveboard/types.ts';
+import {
+	QUORUM_REQUIRED,
+	REPORTABLE_SIGNALS,
+	SIGNAL_TYPES,
+	type SignalType
+} from '../src/liveboard/types.ts';
 
 const T0 = 1_785_000_000_000;
 
@@ -170,5 +175,38 @@ describe('deriveJitterMs is stable within an epoch', () => {
 			expect(j).toBeGreaterThanOrEqual(0);
 			expect(j).toBeLessThanOrEqual(PUBLICATION_JITTER_MAX_MS);
 		}
+	});
+});
+
+describe('REPORTABLE_SIGNALS is derived, not listed', () => {
+	/**
+	 * A quorum signal offered on a compose surface collects reports the ingest route
+	 * refuses, which teaches people the app is broken and teaches nobody why. The
+	 * client cannot maintain its own list, because a hand-maintained second list
+	 * fails silently and in the unsafe direction.
+	 */
+	it('excludes exactly the quorum signals', () => {
+		expect([...REPORTABLE_SIGNALS].sort()).toEqual(
+			SIGNAL_TYPES.filter((s) => !QUORUM_REQUIRED.includes(s))
+				.slice()
+				.sort()
+		);
+		for (const q of QUORUM_REQUIRED) expect(REPORTABLE_SIGNALS).not.toContain(q);
+	});
+
+	/**
+	 * The property that survives a change: adding a signal to QUORUM_REQUIRED must
+	 * remove it from every picker with nobody remembering to. Asserted as a partition
+	 * so it holds for whatever the two lists become.
+	 */
+	it('partitions the vocabulary with nothing lost and nothing duplicated', () => {
+		expect(REPORTABLE_SIGNALS.length + QUORUM_REQUIRED.length).toBe(SIGNAL_TYPES.length);
+		expect(new Set([...REPORTABLE_SIGNALS, ...QUORUM_REQUIRED]).size).toBe(SIGNAL_TYPES.length);
+	});
+
+	/** Non-empty, or "excludes the quorum signals" would be satisfied by excluding all. */
+	it('leaves ordinary hazards reportable', () => {
+		expect(REPORTABLE_SIGNALS).toContain('TEAR_GAS');
+		expect(REPORTABLE_SIGNALS.length).toBeGreaterThan(0);
 	});
 });

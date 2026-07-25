@@ -23,6 +23,7 @@ const ROUTES = [
 	'/document',
 	'/document/new',
 	'/nearby',
+	'/nearby/report',
 	'/directory',
 	'/incidents',
 	'/limits',

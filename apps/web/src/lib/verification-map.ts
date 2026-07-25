@@ -73,3 +73,29 @@ export function directoryLabelKind(state: string): LabelKind {
 	if (state === 'Quarantined') return 'problem';
 	return 'unchecked'; // SelfListed, Stale
 }
+
+/**
+ * Live-board row -> public label kind (ARCHITECTURE §6.3).
+ *
+ * A THIRD ladder, and it lives here rather than in liveboard-labels.ts for the
+ * same reason the other two do: that file imports the paraglide runtime, and a
+ * mapping this load-bearing has to be unit-testable with bare vitest.
+ *
+ * A marshal quorum is two role-bound signatures checked against key_directory — a
+ * person holding a hardware key attested to this — so it takes the `team` tier.
+ * Community corroboration is the AUTONOMOUS CEILING and takes `nearby`, which is
+ * the only public string the autonomous layer may ever reach. Everything else is
+ * `unchecked`, because the safe direction is always to promise less.
+ *
+ * `problem` is unreachable from here on purpose: there is no flag mechanism on the
+ * live board, so emitting the flagged label would describe something that cannot
+ * happen.
+ */
+export function boardLabelKind(row: {
+	corroborated: boolean;
+	marshal_verified: boolean;
+}): LabelKind {
+	if (row.marshal_verified) return 'team';
+	if (row.corroborated) return 'nearby';
+	return 'unchecked';
+}
