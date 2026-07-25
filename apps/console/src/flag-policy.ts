@@ -40,7 +40,14 @@ export const FLIPPABLE = [
 	// sufficient on its own: BROKER_INBOX_MAC_KEY is absent, so every brokered
 	// route refuses for everyone regardless, which is the correct resting state
 	// until a broker is actually operated.
-	'aid_broker'
+	'aid_broker',
+	// The brokered medical channel. Flipping it is not sufficient on its own:
+	// every route refuses over clearnet until an onion origin is operated, and
+	// BROKER_INBOX_MAC_KEY is absent. Deliberately NOT closed by heightened
+	// threat, unlike every other write flag (maintainer decision, 2026-07-26):
+	// the onion requirement is the stronger gate, and this platform offers no
+	// state emergency number to fall back to.
+	'medical_broker'
 ] as const;
 
 /** Irreversible high-harm gates: built, but permanently OFF at this milestone. */

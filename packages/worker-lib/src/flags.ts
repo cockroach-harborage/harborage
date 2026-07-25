@@ -47,7 +47,12 @@ export const FLAG_NAMES = [
 	// and no Broker or Mailbox instance is ever created. Switch-on additionally
 	// waits on BROKER_INBOX_MAC_KEY existing and on briefing and broker humans,
 	// neither of which a flag can supply.
-	'aid_broker'
+	'aid_broker',
+	// The brokered medical channel. Off means every /api/medical/* route refuses.
+	// Unlike every other write flag it is NOT closed by heightened threat: the
+	// routes already refuse over clearnet, which is strictly stronger and
+	// unconditional today, and closing them again would leave nothing behind.
+	'medical_broker'
 ] as const;
 
 export type FlagName = (typeof FLAG_NAMES)[number];

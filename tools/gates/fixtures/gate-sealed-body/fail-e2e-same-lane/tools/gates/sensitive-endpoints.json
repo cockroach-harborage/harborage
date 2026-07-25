@@ -8,13 +8,15 @@
 			"platform_key": {
 				"binding": "INTAKE_PRIVATE_KEY",
 				"why": "Private half of the intake sealed-box keypair, held only by the consumer, which is the sole reader of the metadata envelope."
-			}
+			},
+			"origin": "any"
 		},
 		{
 			"endpoint": "POST /api/things/keyring",
 			"class": "SEALED-E2E",
 			"sealed_object": "thing-metadata-envelope",
-			"note": "Broken invariant: this claims E2E over the SAME sealed object that the registered key above opens. Scoping custody to a lane must not become a way to claim E2E over ciphertext the platform can already read."
+			"note": "Broken invariant: this claims E2E over the SAME sealed object that the registered key above opens. Scoping custody to a lane must not become a way to claim E2E over ciphertext the platform can already read.",
+			"origin": "any"
 		}
 	]
 }

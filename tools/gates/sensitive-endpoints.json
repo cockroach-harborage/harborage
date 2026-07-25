@@ -6,12 +6,19 @@
 	},
 	"sealed_object_comment": "The name of one body of ciphertext. Custody is a claim about a specific object, not about a whole deployment: the incident metadata envelope and the evidence content key are different lanes with different claims, and a key that opens one says nothing about the other. Required on every entry, with no default, because a missing lane would have to silently mean either 'opens nothing' or 'opens everything'.",
 	"platform_keys_comment": "A SEALED-TO-PLATFORM endpoint must name the binding that opens it; that binding is registered as opening THAT entry's sealed object and nothing else. Every unseal-shaped binding in the codebase must be registered somewhere, or every SEALED-E2E claim in the file fails. Naming the key honestly is the point: the alternative was choosing an obscure binding name so the pattern would not match, which leaves the check green while the property it guards quietly stops holding.",
+	"origin_comment": "Which network an endpoint may be reached over. REQUIRED on every entry, with no default, for the same reason sealed_object has none: either default would silently decide a safety question on the author's behalf. 'onion' means the handler refuses over clearnet, and the gate cross-checks that against the CODE rather than trusting this field, so the registry cannot lie in either direction.",
 	"sensitive_prefixes_comment": "Route prefixes where a body is assumed sensitive until proven otherwise. Any route under one of these must be registered above or listed in unsealed_exempt with a reason. Added at M4 because nothing previously stopped someone adding POST /api/aid/leak that took plain JSON: the registry only checked the entries it already had, so an unregistered route was invisible to it. Enumerate the prefix, and a new route has to argue for itself.",
 	"sensitive_prefixes": ["/api/aid/", "/api/medical/", "/api/evidence/"],
 	"unsealed_exempt": [
 		{
 			"endpoint": "POST /api/aid/offer",
-			"why": "Carries a public one-shot X25519 prekey, two closed-taxonomy routing values, and padding the sender sealed to its OWN key. There is no counterparty ciphertext in it, so registering it SEALED-E2E would be a custody claim over a body that carries nothing to have custody of, and this file exists to stop exactly that kind of overclaim. It is still framed and size-checked identically to the other three, because uniform framing is what makes an announce and a reveal indistinguishable by size."
+			"why": "Carries a public one-shot X25519 prekey, two closed-taxonomy routing values, and padding the sender sealed to its OWN key. There is no counterparty ciphertext in it, so registering it SEALED-E2E would be a custody claim over a body that carries nothing to have custody of, and this file exists to stop exactly that kind of overclaim. It is still framed and size-checked identically to the other three, because uniform framing is what makes an announce and a reveal indistinguishable by size.",
+			"origin": "any"
+		},
+		{
+			"endpoint": "POST /api/medical/standby",
+			"origin": "onion",
+			"why": "A medic announcing availability in a region. Carries a public one-shot prekey and a routing region, with padding sealed to the sender's own key, so there is no counterparty ciphertext to make a custody claim about."
 		}
 	],
 	"endpoints": [
@@ -23,31 +30,64 @@
 			"platform_key": {
 				"binding": "INTAKE_PRIVATE_KEY",
 				"why": "Private half of the intake sealed-box keypair, held as a wrangler secret on workers/consumer ONLY. The consumer is the sole reader of the metadata envelope and the first writer of the incidents table. api, web and console must never bind it: they have no reason to read the body, and holding it there would widen the blast radius of an edge compromise for nothing. It opens the incident metadata envelope and no other sealed object."
-			}
+			},
+			"origin": "any"
 		},
 		{
 			"endpoint": "POST /api/evidence/keyring",
 			"class": "SEALED-E2E",
 			"sealed_object": "evidence-content-key",
-			"note": "The content-key ring for one evidence original: copies sealed to the reporter's vault key and to an off-platform custodian, and for tier B an offshore half that every quorum needs. The platform binds NO key that opens any copy and exposes no unwrap endpoint, so \"we cannot produce plaintext\" is literally true of this sealed object. INTAKE_PRIVATE_KEY opens the incident-metadata-envelope lane and says nothing about this one, which is exactly the distinction the sealed_object scoping exists to record."
+			"note": "The content-key ring for one evidence original: copies sealed to the reporter's vault key and to an off-platform custodian, and for tier B an offshore half that every quorum needs. The platform binds NO key that opens any copy and exposes no unwrap endpoint, so \"we cannot produce plaintext\" is literally true of this sealed object. INTAKE_PRIVATE_KEY opens the incident-metadata-envelope lane and says nothing about this one, which is exactly the distinction the sealed_object scoping exists to record.",
+			"origin": "any"
 		},
 		{
 			"endpoint": "POST /api/aid/need",
 			"class": "SEALED-E2E",
 			"sealed_object": "aid-need-card",
-			"note": "The seeker's structured need card, sealed client-side to the responder's one-shot X25519 prekey. The Broker routes on the clear prefix (a state-level region and a closed category) and holds no key for the card. BROKER_INBOX_MAC_KEY authenticates an inbox token and derives an instance name; it opens no ciphertext at all, so it is not a platform key for this or any lane."
+			"note": "The seeker's structured need card, sealed client-side to the responder's one-shot X25519 prekey. The Broker routes on the clear prefix (a state-level region and a closed category) and holds no key for the card. BROKER_INBOX_MAC_KEY authenticates an inbox token and derives an instance name; it opens no ciphertext at all, so it is not a platform key for this or any lane.",
+			"origin": "any"
 		},
 		{
 			"endpoint": "POST /api/aid/accept",
 			"class": "SEALED-E2E",
 			"sealed_object": "aid-accept-card",
-			"note": "The responder's card, sealed to the seeker's one-shot prekey. The Broker HOLDS it rather than delivering it, and releases it only once the seeker produces the preimage of their own commitment on a separately-ticked request. That is proof of continued presence, not proof the need is real: whoever planted a fake need also chose the secret."
+			"note": "The responder's card, sealed to the seeker's one-shot prekey. The Broker HOLDS it rather than delivering it, and releases it only once the seeker produces the preimage of their own commitment on a separately-ticked request. That is proof of continued presence, not proof the need is real: whoever planted a fake need also chose the secret.",
+			"origin": "any"
 		},
 		{
 			"endpoint": "POST /api/aid/poll",
 			"class": "SEALED-E2E",
 			"sealed_object": "aid-mailbox-message",
-			"note": "Registered as its own lane, and deliberately as the STORED ciphertext rather than as an intake body, so the E2E rule runs over what the Mailbox holds as well as over what arrives. The request body is one uniform frame like every other brokered route; the response is padded to a fixed length with random bytes and returned after a fixed number of ticks, so an empty poll and a delivering poll are indistinguishable to the network. That padding hides nothing from Cloudflare, which is the stated adversary, and the code comment says so."
+			"note": "Registered as its own lane, and deliberately as the STORED ciphertext rather than as an intake body, so the E2E rule runs over what the Mailbox holds as well as over what arrives. The request body is one uniform frame like every other brokered route; the response is padded to a fixed length with random bytes and returned after a fixed number of ticks, so an empty poll and a delivering poll are indistinguishable to the network. That padding hides nothing from Cloudflare, which is the stated adversary, and the code comment says so.",
+			"origin": "any"
+		},
+		{
+			"endpoint": "POST /api/medical/request",
+			"class": "SEALED-E2E",
+			"sealed_object": "medical-triage-envelope",
+			"origin": "onion",
+			"note": "The injured person's structured triage card, sealed client-side to the responder's one-shot X25519 prekey. Severity is INSIDE the ciphertext and never in the routing key: one Broker per (region, severity) would give an instance whose name means \"the severely-injured queue for this district\" and whose volume is a protest-intensity signal readable without opening anything. A polling medic sorts by triage on their own device."
+		},
+		{
+			"endpoint": "POST /api/medical/accept",
+			"class": "SEALED-E2E",
+			"sealed_object": "medical-accept-envelope",
+			"origin": "onion",
+			"note": "The medic's card, sealed to the requester's one-shot prekey and HELD by the Broker until the requester proves continued presence on a separately-ticked request."
+		},
+		{
+			"endpoint": "POST /api/medical/send",
+			"class": "SEALED-E2E",
+			"sealed_object": "medical-message-envelope",
+			"origin": "onion",
+			"note": "One sealed message on an established pairing. The late meet-point rides this route and has no route of its own: a dedicated reveal endpoint would create a server-visible event meaning a precise location was shared at time T on lane L, which is the artifact the memory-only broker exists to not produce."
+		},
+		{
+			"endpoint": "POST /api/medical/poll",
+			"class": "SEALED-E2E",
+			"sealed_object": "medical-mailbox-message",
+			"origin": "onion",
+			"note": "The ciphertext a Mailbox holds and returns, registered as its own lane so the E2E rule runs over stored ciphertext as well as over what arrives. Response padded to a fixed length and returned after a fixed number of ticks."
 		}
 	]
 }

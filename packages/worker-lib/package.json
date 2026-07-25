@@ -17,6 +17,7 @@
 		"./archive": "./src/archive/index.ts",
 		"./onion": "./src/onion.ts",
 		"./broker": "./src/broker.ts",
+		"./medical": "./src/medical.ts",
 		"./reputation": "./src/reputation.ts"
 	},
 	"scripts": {

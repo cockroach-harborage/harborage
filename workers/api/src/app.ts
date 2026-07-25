@@ -25,6 +25,8 @@ import {
 	verifyInboxToken,
 	type BrokerFrame
 } from '@harborage/worker-lib/broker';
+import { requireOnionOrigin } from '@harborage/worker-lib/onion';
+import { medicTier } from '@harborage/worker-lib/medical';
 import { featureAvailable, flagEnabled } from '@harborage/worker-lib/flags';
 import { coarseMs, safeLog, statusClass } from '@harborage/worker-lib/safe-log';
 import { verifyTurnstile } from '@harborage/worker-lib/turnstile';
@@ -833,20 +835,102 @@ app.post('/api/aid/poll', async (c) => {
 	if (body instanceof Response) return body;
 	const refused = await aidGate(c, body.raw);
 	if (refused) return refused;
+	return brokerPoll(c, body.frame);
+});
 
+// --- Shared broker tails -----------------------------------------------------
+// Everything AFTER the per-route gate. The gates themselves are never shared:
+// gate-onion-only checks per handler block, and a guard reachable from one place
+// can be deleted from one place while every route keeps looking guarded.
+
+/** Announce an open need on the broker for this frame's (region, category). */
+async function medicalOpen(
+	c: { env: ApiEnv },
+	frame: BrokerFrame,
+	_raw: Uint8Array
+): Promise<Response> {
+	const ref = await brokerRef(c.env.BROKER_INBOX_MAC_KEY, frame.region, frame.category);
+	if (!ref) return new Response('not open', { status: 403 });
+	const ns = c.env.BROKER;
+	const broker = ns.get(ns.idFromName(brokerName(ref))) as unknown as BrokerStub;
+	const handle = randomBytes(16);
+	const inbox = await mintInboxToken(c.env.BROKER_INBOX_MAC_KEY, ref, handle, 0);
+	if (!inbox) return new Response('not open', { status: 403 });
+	const opened = await broker.openNeed({
+		category: frame.category,
+		commit: frame.commit,
+		seekerInbox: inbox,
+		handle
+	});
+	if (opened === 'full' || opened === 'bad-input') return new Response('not open', { status: 503 });
+	return Response.json(
+		{ inbox, need_ref: bytesToB64u(handleRefOf(ref, handle)) },
+		{ status: 202, headers: { 'cache-control': 'no-store' } }
+	);
+}
+
+/** Claim at most one waiting need, and mint the responder's inbox. */
+async function medicalClaim(c: { env: ApiEnv }, frame: BrokerFrame): Promise<Response> {
+	const ref = await brokerRef(c.env.BROKER_INBOX_MAC_KEY, frame.region, frame.category);
+	if (!ref) return new Response('not open', { status: 403 });
+	const ns = c.env.BROKER;
+	const broker = ns.get(ns.idFromName(brokerName(ref))) as unknown as BrokerStub;
+	const handle = randomBytes(16);
+	const inbox = await mintInboxToken(c.env.BROKER_INBOX_MAC_KEY, ref, handle, 1);
+	if (!inbox) return new Response('not open', { status: 403 });
+	const claimed = await broker.claimNeed(inbox, frame.category);
+	return Response.json(
+		{
+			inbox,
+			need_ref: claimed ? bytesToB64u(handleRefOf(ref, hexToBytes(claimed.handleHex))) : null
+		},
+		{ status: 202, headers: { 'cache-control': 'no-store' } }
+	);
+}
+
+/** Record a responder's sealed card against a need. One flat outcome. */
+async function medicalAccept(
+	c: { env: ApiEnv; req: { header(name: string): string | undefined } },
+	frame: BrokerFrame,
+	raw: Uint8Array
+): Promise<Response> {
 	const inboxHeader = c.req.header('X-HB-Inbox') ?? '';
 	const token = await verifyInboxToken(c.env.BROKER_INBOX_MAC_KEY, inboxHeader);
-	if (!token) return c.text('not open', 403);
+	if (!token) return new Response('not open', { status: 403 });
+	const ns = c.env.BROKER;
+	const broker = ns.get(ns.idFromName(brokerName(token.brokerRef))) as unknown as BrokerStub;
+	const verdict = await broker.accept(bytesToHex(frame.handleRef.subarray(5)), inboxHeader, raw);
+	return Response.json(
+		{ ok: verdict === 'ok' },
+		{ status: 202, headers: { 'cache-control': 'no-store' } }
+	);
+}
+
+/**
+ * Collect whatever is waiting, in fixed time and fixed size.
+ *
+ * The Broker keepalive rides in parallel. A Durable Object with no in-flight
+ * request is evicted after 70 to 140 seconds, and the poll goes to the MAILBOX,
+ * so without this the Broker sees no traffic between an offer and an accept and
+ * a match dies mid-handshake with its state gone.
+ */
+async function brokerPoll(
+	c: { env: ApiEnv; req: { header(name: string): string | undefined } },
+	frame: BrokerFrame
+): Promise<Response> {
+	const inboxHeader = c.req.header('X-HB-Inbox') ?? '';
+	const token = await verifyInboxToken(c.env.BROKER_INBOX_MAC_KEY, inboxHeader);
+	if (!token) return new Response('not open', { status: 403 });
 
 	const bns = c.env.BROKER;
 	const broker = bns.get(bns.idFromName(brokerName(token.brokerRef))) as unknown as BrokerStub;
 	const mns = c.env.MAILBOX;
 	const mailbox = mns.get(mns.idFromName(inboxHeader)) as unknown as MailboxStub;
 
-	// A non-zero preimage means "release the card you are holding for me".
-	const preimage = body.frame.commit;
+	// A non-zero commitment field means "release the card you are holding for me".
+	const preimage = frame.commit;
 	const wantsRelease = preimage.some((b) => b !== 0);
-	const needHex = bytesToHex(body.frame.handleRef.subarray(5));
+	const needHex = bytesToHex(frame.handleRef.subarray(5));
 
 	const [, delivered] = await Promise.all([
 		broker.keepalive(),
@@ -863,7 +947,7 @@ app.post('/api/aid/poll', async (c) => {
 		status: 200,
 		headers: { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' }
 	});
-});
+}
 
 function bytesToHex(b: Uint8Array): string {
 	let s = '';
@@ -882,6 +966,190 @@ function bytesToB64u(b: Uint8Array): string {
 	for (const x of b) s += String.fromCharCode(x);
 	return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
+
+// --- Brokered medical (PRD §4.7; ARCHITECTURE §5.3, §9.2) --------------------
+//
+// THE HANDLER ORDER BELOW IS THE INVERSE OF EVERY OTHER ROUTE IN THIS FILE, and
+// the inversion is the point.
+//
+// Everywhere else the order is structural, then rate ladder, then flag, then
+// credential. That order exists so a flood is discarded before it can spend a
+// KV read or a signature verification, and so a malformed body earns a 400
+// rather than a 401 that would leave the shape rule untestable.
+//
+// On a life-safety route the first question is different. A KV read, a Durable
+// Object lookup and a D1 query are each an event on Cloudflare's side of the
+// boundary, and their timing correlates with the request that caused them. For
+// a route only an injured person or a medic would ever call, the fact that a
+// request ARRIVED AT ALL is the sensitive fact. So origin is settled before any
+// binding is touched: a clearnet caller gets a flat 403 and leaves no
+// platform-side trace beyond the request line.
+//
+// Two things still run first, and neither reads a binding: the content-type
+// check and the length cap. They must, because verifying the origin assertion
+// means hashing the body, and buffering an unbounded body on an unauthenticated
+// route is its own problem.
+//
+// ONE BODY READ, TWO CONSUMERS. The origin assertion and the proof of
+// possession both bind the digest of the bytes that arrived, taken from a single
+// read. Two reads that diverged would fail open on one of the two checks with
+// nothing to notice.
+//
+// requireOnionOrigin IS WRITTEN OUT IN ALL FIVE HANDLERS ON PURPOSE. Factoring
+// it into a shared helper would let it be deleted from one place while five
+// routes kept looking guarded, and gate-onion-only checks per handler block for
+// exactly that reason. Everything after it is shared.
+
+/** Shared tail: the flag, then the one-shot credential. Never the origin check. */
+async function medicalGate(
+	c: { req: { raw: Request; header(name: string): string | undefined }; env: ApiEnv },
+	raw: Uint8Array
+): Promise<Response | null> {
+	if (!(await broadOk(c))) return new Response('slow down', { status: 429 });
+	// disabledUnderHeightenedThreat: FALSE, and this is a deliberate exception to
+	// the house rule (maintainer decision, 2026-07-26). Every route here already
+	// refuses over clearnet, which is a strictly stronger gate than heightened
+	// threat and is unconditional today. Closing it again under heightened threat
+	// would remove the only medical channel and leave nothing behind it, and this
+	// platform offers no state emergency number to fall back to, by design.
+	if (
+		!(await featureAvailable(c.env.FLAGS, 'medical_broker', {
+			disabledUnderHeightenedThreat: false
+		}))
+	)
+		return new Response('not open', { status: 403 });
+	const credential = await oneShotCredentialOk(c, raw, 'medical');
+	if (!credential.ok) return new Response('credential required', { status: 401 });
+	return null;
+}
+
+/** POST /api/medical/request — an injured person's sealed triage card. */
+app.post('/api/medical/request', async (c) => {
+	const ct = c.req.header('content-type') ?? '';
+	if (!ct.includes('application/octet-stream')) return c.text('sealed envelope required', 415);
+	if (Number(c.req.header('content-length') ?? '0') > maxEnvelopeLen(ALG_BROKER_ONESHOT))
+		return c.text('too large', 413);
+	const raw = new Uint8Array(await c.req.arrayBuffer());
+	if (raw.length !== BROKER_FRAME_LEN) return c.text('sealed envelope required', 400);
+	const bodyHash = new Uint8Array(await crypto.subtle.digest('SHA-256', raw as BufferSource));
+
+	const refuse = await requireOnionOrigin(c.req.raw, bodyHash, c.env, Date.now());
+	if (refuse) return refuse;
+
+	const frame = parseBrokerFrame(raw);
+	if (!frame) return c.text('sealed envelope required', 400);
+	const gated = await medicalGate(c, raw);
+	if (gated) return gated;
+	return medicalOpen(c, frame, raw);
+});
+
+/** POST /api/medical/standby — a medic announces availability in a region. */
+app.post('/api/medical/standby', async (c) => {
+	const ct = c.req.header('content-type') ?? '';
+	if (!ct.includes('application/octet-stream')) return c.text('sealed envelope required', 415);
+	if (Number(c.req.header('content-length') ?? '0') > maxEnvelopeLen(ALG_BROKER_ONESHOT))
+		return c.text('too large', 413);
+	const raw = new Uint8Array(await c.req.arrayBuffer());
+	if (raw.length !== BROKER_FRAME_LEN) return c.text('sealed envelope required', 400);
+	const bodyHash = new Uint8Array(await crypto.subtle.digest('SHA-256', raw as BufferSource));
+
+	const refuse = await requireOnionOrigin(c.req.raw, bodyHash, c.env, Date.now());
+	if (refuse) return refuse;
+
+	const frame = parseBrokerFrame(raw);
+	if (!frame) return c.text('sealed envelope required', 400);
+	const gated = await medicalGate(c, raw);
+	if (gated) return gated;
+	return medicalClaim(c, frame);
+});
+
+/** POST /api/medical/accept — a medic's sealed card, held pending the seeker. */
+app.post('/api/medical/accept', async (c) => {
+	const ct = c.req.header('content-type') ?? '';
+	if (!ct.includes('application/octet-stream')) return c.text('sealed envelope required', 415);
+	if (Number(c.req.header('content-length') ?? '0') > maxEnvelopeLen(ALG_BROKER_ONESHOT))
+		return c.text('too large', 413);
+	const raw = new Uint8Array(await c.req.arrayBuffer());
+	if (raw.length !== BROKER_FRAME_LEN) return c.text('sealed envelope required', 400);
+	const bodyHash = new Uint8Array(await crypto.subtle.digest('SHA-256', raw as BufferSource));
+
+	const refuse = await requireOnionOrigin(c.req.raw, bodyHash, c.env, Date.now());
+	if (refuse) return refuse;
+
+	const frame = parseBrokerFrame(raw);
+	if (!frame) return c.text('sealed envelope required', 400);
+	const gated = await medicalGate(c, raw);
+	if (gated) return gated;
+
+	// No issuer is pinned, so medicTier is 'unvetted' for every badge and a HIGH
+	// claim refuses here regardless of the flag. A BASIC responder still passes:
+	// a first-aider who is present beats a doctor who is not.
+	const claimed = c.req.header('X-HB-Medic-Tier');
+	if (claimed === 'HIGH' && medicTier({ issuerId: '', claimedTier: 'HIGH' }) !== 'HIGH')
+		return c.text('not open', 403);
+
+	return medicalAccept(c, frame, raw);
+});
+
+/**
+ * POST /api/medical/send — one sealed message on an established pairing.
+ *
+ * THE LATE MEET-POINT RIDES THIS ROUTE, and there is deliberately no separate
+ * one for it. A dedicated reveal route would create a server-visible event
+ * meaning "a precise location was shared at time T on lane L", which is exactly
+ * the artifact the memory-only broker exists to not produce. Nor is any of this
+ * wired to the LOCKED precise_location_reveal flag: that flag governs reveals
+ * the PLATFORM performs, and here the platform relays ciphertext it cannot read.
+ */
+app.post('/api/medical/send', async (c) => {
+	const ct = c.req.header('content-type') ?? '';
+	if (!ct.includes('application/octet-stream')) return c.text('sealed envelope required', 415);
+	if (Number(c.req.header('content-length') ?? '0') > maxEnvelopeLen(ALG_BROKER_ONESHOT))
+		return c.text('too large', 413);
+	const raw = new Uint8Array(await c.req.arrayBuffer());
+	if (raw.length !== BROKER_FRAME_LEN) return c.text('sealed envelope required', 400);
+	const bodyHash = new Uint8Array(await crypto.subtle.digest('SHA-256', raw as BufferSource));
+
+	const refuse = await requireOnionOrigin(c.req.raw, bodyHash, c.env, Date.now());
+	if (refuse) return refuse;
+
+	const frame = parseBrokerFrame(raw);
+	if (!frame) return c.text('sealed envelope required', 400);
+	const gated = await medicalGate(c, raw);
+	if (gated) return gated;
+
+	const token = await verifyInboxToken(
+		c.env.BROKER_INBOX_MAC_KEY,
+		c.req.header('X-HB-Inbox') ?? ''
+	);
+	if (!token) return c.text('not open', 403);
+	const mns = c.env.MAILBOX;
+	const mailbox = mns.get(
+		mns.idFromName(c.req.header('X-HB-Peer') ?? '')
+	) as unknown as MailboxStub;
+	await mailbox.deliver(raw);
+	return c.json({ ok: true }, 202, { 'cache-control': 'no-store' });
+});
+
+/** POST /api/medical/poll — fixed time, fixed size, whether or not anything waits. */
+app.post('/api/medical/poll', async (c) => {
+	const ct = c.req.header('content-type') ?? '';
+	if (!ct.includes('application/octet-stream')) return c.text('sealed envelope required', 415);
+	if (Number(c.req.header('content-length') ?? '0') > maxEnvelopeLen(ALG_BROKER_ONESHOT))
+		return c.text('too large', 413);
+	const raw = new Uint8Array(await c.req.arrayBuffer());
+	if (raw.length !== BROKER_FRAME_LEN) return c.text('sealed envelope required', 400);
+	const bodyHash = new Uint8Array(await crypto.subtle.digest('SHA-256', raw as BufferSource));
+
+	const refuse = await requireOnionOrigin(c.req.raw, bodyHash, c.env, Date.now());
+	if (refuse) return refuse;
+
+	const frame = parseBrokerFrame(raw);
+	if (!frame) return c.text('sealed envelope required', 400);
+	const gated = await medicalGate(c, raw);
+	if (gated) return gated;
+	return brokerPoll(c, frame);
+});
 
 app.notFound((c) => c.text('not found', 404));
 

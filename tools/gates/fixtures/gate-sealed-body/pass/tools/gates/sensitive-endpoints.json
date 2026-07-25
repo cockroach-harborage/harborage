@@ -5,7 +5,8 @@
 	"unsealed_exempt": [
 		{
 			"endpoint": "POST /api/things/ping",
-			"why": "Carries a liveness probe and nothing else, so registering it with a custody class would be a claim over a body that holds nothing to have custody of."
+			"why": "Carries a liveness probe and nothing else, so registering it with a custody class would be a claim over a body that holds nothing to have custody of.",
+			"origin": "any"
 		}
 	],
 	"endpoints": [
@@ -17,13 +18,15 @@
 			"platform_key": {
 				"binding": "INTAKE_PRIVATE_KEY",
 				"why": "Private half of the intake sealed-box keypair, held only by the consumer, which is the sole reader of the metadata envelope."
-			}
+			},
+			"origin": "any"
 		},
 		{
 			"endpoint": "POST /api/things/keyring",
 			"class": "SEALED-E2E",
 			"sealed_object": "thing-content-key",
-			"note": "A different sealed object, opened by no platform key. This is the case the lane scoping exists to allow, so the pass fixture has to contain it or the relaxation is never exercised."
+			"note": "A different sealed object, opened by no platform key. This is the case the lane scoping exists to allow, so the pass fixture has to contain it or the relaxation is never exercised.",
+			"origin": "any"
 		}
 	]
 }

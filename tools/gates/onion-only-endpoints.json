@@ -3,5 +3,26 @@
 	"inverse_comment": "The rule also runs backwards: any handler in workers/** that calls requireOnionOrigin must appear here. That is what keeps this gate meaningful while the list below is empty. Without it, the first onion-only route could ship unregistered and the gate would report success over an endpoint it had never looked at.",
 	"resting_state_comment": "ONION_INGRESS_MAC_KEY is absent in production, so classifyOrigin returns 'clearnet' for every request and every endpoint listed here refuses for everyone on every network. That is the correct resting state, not an outage: the operated onion origin does not exist yet, and a life-safety flow that quietly worked over clearnet would be worse than one that is honestly closed.",
 	"why_field_comment": "Each entry carries a `why` of at least 40 characters explaining what pairing or correlation the onion requirement defeats for THAT endpoint. Same lesson as platform_key.why in sensitive-endpoints.json: a registry whose entries carry no reasoning becomes a list nobody rereads, and the next person removes an entry because they cannot see what it was for.",
-	"endpoints": []
+	"endpoints": [
+		{
+			"endpoint": "POST /api/medical/request",
+			"why": "Two source IPs arriving at one low-volume broker inside the jitter window is a pairing sealed-sender cannot hide, and on a route only an injured person or a medic would ever call, the fact that a request arrived at all is the sensitive fact."
+		},
+		{
+			"endpoint": "POST /api/medical/standby",
+			"why": "Two source IPs arriving at one low-volume broker inside the jitter window is a pairing sealed-sender cannot hide, and on a route only an injured person or a medic would ever call, the fact that a request arrived at all is the sensitive fact."
+		},
+		{
+			"endpoint": "POST /api/medical/accept",
+			"why": "Two source IPs arriving at one low-volume broker inside the jitter window is a pairing sealed-sender cannot hide, and on a route only an injured person or a medic would ever call, the fact that a request arrived at all is the sensitive fact."
+		},
+		{
+			"endpoint": "POST /api/medical/send",
+			"why": "Two source IPs arriving at one low-volume broker inside the jitter window is a pairing sealed-sender cannot hide, and on a route only an injured person or a medic would ever call, the fact that a request arrived at all is the sensitive fact."
+		},
+		{
+			"endpoint": "POST /api/medical/poll",
+			"why": "Two source IPs arriving at one low-volume broker inside the jitter window is a pairing sealed-sender cannot hide, and on a route only an injured person or a medic would ever call, the fact that a request arrived at all is the sensitive fact."
+		}
+	]
 }
