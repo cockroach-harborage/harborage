@@ -27,6 +27,7 @@ import {
 } from '@harborage/worker-lib/broker';
 import { requireOnionOrigin } from '@harborage/worker-lib/onion';
 import { medicTier } from '@harborage/worker-lib/medical';
+import { bandFor, BANDS, TIERS, type Band, type Tier } from '@harborage/worker-lib/capacity';
 import { featureAvailable, flagEnabled } from '@harborage/worker-lib/flags';
 import { coarseMs, safeLog, statusClass } from '@harborage/worker-lib/safe-log';
 import { verifyTurnstile } from '@harborage/worker-lib/turnstile';
@@ -1151,6 +1152,154 @@ app.post('/api/medical/poll', async (c) => {
 	return brokerPoll(c, frame);
 });
 
+// --- Helper offers and capacity bands (PRD §4.9) -----------------------------
+
+/**
+ * POST /api/help/offer — record one helper offer.
+ *
+ * ONE STATEMENT, AND DELIBERATELY NO SELECT. Deduplication is the UNIQUE index
+ * plus ON CONFLICT DO NOTHING, not a read-then-write. That is not an
+ * optimisation: it is what makes "no route reads this table row by row"
+ * structurally true rather than a convention someone later breaks while
+ * "improving" the error message. gate-no-enumeration refuses a SELECT against a
+ * registry table inside any handler block.
+ *
+ * THE RESPONSE IS BYTE-IDENTICAL for a first offer and a duplicate. Returning
+ * {created: true|false} would be an oracle telling the caller whether a given
+ * pubkey had already offered in this bucket, which is a membership test against
+ * a table whose whole point is that it cannot be queried for membership.
+ */
+app.post('/api/help/offer', async (c) => {
+	const raw = new Uint8Array(await c.req.raw.clone().arrayBuffer());
+	let body: {
+		region_bucket?: unknown;
+		skill?: unknown;
+		tier?: unknown;
+		languages?: unknown;
+		accessibility?: unknown;
+		dedup_token?: unknown;
+	};
+	try {
+		body = JSON.parse(new TextDecoder().decode(raw));
+	} catch {
+		return c.json({ error: 'bad body' }, 400);
+	}
+	const region = body.region_bucket;
+	const skill = body.skill;
+	const tier = body.tier ?? 'BASIC';
+	const dedup = body.dedup_token;
+	if (typeof region !== 'string' || !/^[A-Z]{2}(-[A-Z0-9]{2,3}){1,2}$/.test(region))
+		return c.json({ error: 'bad body' }, 400);
+	// `accommodation` is not in the enum, so this is where a stranger-to-home
+	// offer is refused. The CHECK constraint in 0019 says the same thing one
+	// layer down, which is the layer that survives a Worker being replaced.
+	if (typeof skill !== 'string' || !HELP_SKILLS.includes(skill))
+		return c.json({ error: 'bad body' }, 400);
+	if (typeof tier !== 'string' || !(TIERS as readonly string[]).includes(tier))
+		return c.json({ error: 'bad body' }, 400);
+	if (typeof dedup !== 'string' || !/^[0-9a-f]{64}$/.test(dedup))
+		return c.json({ error: 'bad body' }, 400);
+
+	if (!(await broadOk(c))) return c.text('slow down', 429);
+	if (
+		!(await featureAvailable(c.env.FLAGS, 'helper_registry', {
+			disabledUnderHeightenedThreat: true
+		}))
+	)
+		return c.text('not open', 403);
+
+	const credential = await credentialOk(c, raw, 'directory');
+	if (!credential.ok) {
+		safeLog('credential_rejected', { route: c.req.routePath, outcome: credential.outcome });
+		return c.text('credential required', 401);
+	}
+	if (!(await verifyTurnstile(c.req.header('cf-turnstile-response'), c.env.TURNSTILE_SECRET)))
+		return c.text('verification failed', 403);
+
+	// No issuer is pinned, so a HIGH claim cannot be honoured and is refused here
+	// as well as by the empty issuer list. Same structural switch-on gate as the
+	// medical accept route.
+	if (tier === 'HIGH' && medicTier({ issuerId: '', claimedTier: 'HIGH' }) !== 'HIGH')
+		return c.text('not open', 403);
+
+	const epoch = offerEpochOf(Date.now());
+	await c.env.DB.prepare(
+		`INSERT INTO skills_registry
+			(id, region_bucket, skill, tier, languages, accessibility, offer_epoch, dedup_token,
+			 status, expires_epoch, created_bucket)
+		 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'LIVE', ?9, ?10)
+		 ON CONFLICT(region_bucket, skill, offer_epoch, dedup_token) DO NOTHING`
+	)
+		.bind(
+			crypto.randomUUID(),
+			region,
+			skill,
+			tier,
+			typeof body.languages === 'string' ? body.languages : null,
+			typeof body.accessibility === 'string' ? body.accessibility : null,
+			epoch,
+			dedup,
+			epoch + OFFER_LIFETIME_EPOCHS,
+			new Date().toISOString().slice(0, 10)
+		)
+		.run();
+	return c.json({ ok: true }, 202, { 'cache-control': 'no-store' });
+});
+
+/**
+ * GET /api/help/capacity — the whole materialized grid, one statement, no
+ * parameter.
+ *
+ * There is nothing to filter by, on purpose: a per-region query would be a
+ * server-side record of which district somebody is interested in. The client
+ * downloads the grid and reads its own cell.
+ *
+ * FLAG OFF RETURNS "NOT PUBLISHED", NOT NONE. NONE is a claim about the world;
+ * absence is a claim about us. Conflating them would tell a seeker there is no
+ * help when what is true is that we are not saying.
+ */
+app.get('/api/help/capacity', async (c) => {
+	if (!(await flagEnabled(c.env.FLAGS, 'helper_registry')))
+		return c.json({ published: false, bands: [] }, 200, {
+			'cache-control': 'public, max-age=60'
+		});
+	try {
+		const { results } = await c.env.DB.prepare('SELECT * FROM capacity_bands').all();
+		return c.json({ published: true, bands: results }, 200, {
+			'cache-control': 'public, max-age=300'
+		});
+	} catch {
+		// Degrade-safe and DISTINGUISHABLE from both of the above. A reader must be
+		// able to tell "we are not publishing" from "we could not read" from "there
+		// is nobody here", and a test asserting only bands.length === 0 would pass
+		// for all three.
+		return c.json({ published: true, bands: [], stale: true }, 200, {
+			'cache-control': 'public, max-age=30'
+		});
+	}
+});
+
+/** Closed vocabulary, mirroring the CHECK constraint in migration 0019. */
+const HELP_SKILLS: readonly string[] = [
+	'legal_aid',
+	'medical_first_aid',
+	'counselling',
+	'translation',
+	'journalism_intake',
+	'accessibility_support',
+	'transport_public',
+	'supplies',
+	'documentation'
+];
+
+/** Coarse rotation period for offers. Never a timestamp. */
+const OFFER_EPOCH_MS = 24 * 60 * 60_000;
+const OFFER_LIFETIME_EPOCHS = 7;
+
+export function offerEpochOf(nowMs: number): number {
+	return Math.floor(nowMs / OFFER_EPOCH_MS);
+}
+
 app.notFound((c) => c.text('not found', 404));
 
 /** Cron: rebuild the public incident index from admitted rows only. */
@@ -1169,6 +1318,82 @@ export async function materialize(env: ApiEnv): Promise<void> {
 		).bind(builtBucket)
 	]);
 	await sweepProbation(env, builtBucket);
+	await materializeCapacityBands(env, builtBucket);
+	await sweepExpiredOffers(env, offerEpochOf(Date.now()));
+}
+
+/**
+ * Rebuild the capacity grid (PRD §4.9).
+ *
+ * THE GRID IS FIXED AND FULLY WRITTEN EVERY CYCLE, empty cells included. A table
+ * containing only the cells that have helpers is a map of where helpers are, so
+ * the presence of a row must carry no information and only the band may move.
+ *
+ * The band arrives as a BOUND PARAMETER from bandFor(), never as SQL. The
+ * thresholds decide how much an adversary learns from a published band, and they
+ * belong somewhere a test can sweep them rather than inside an INSERT nobody can
+ * reach. gate-no-enumeration enforces both halves.
+ *
+ * This is the only reader of skills_registry in the codebase, and it reads a
+ * COUNT rather than rows.
+ */
+export async function materializeCapacityBands(env: ApiEnv, builtBucket: string): Promise<void> {
+	if (!(await flagEnabled(env.FLAGS, 'helper_registry'))) return;
+	const regions = await env.DB.prepare('SELECT DISTINCT region_bucket FROM capacity_bands').all<{
+		region_bucket: string;
+	}>();
+	const known = new Set((regions.results ?? []).map((r) => r.region_bucket));
+	const live = await env.DB.prepare(
+		`SELECT region_bucket, skill, tier, COUNT(*) AS n FROM skills_registry
+		 WHERE status = ?1 GROUP BY region_bucket, skill, tier`
+	)
+		.bind('LIVE')
+		.all<{ region_bucket: string; skill: string; tier: string; n: number }>();
+
+	const counts = new Map<string, number>();
+	for (const row of live.results ?? []) {
+		counts.set(`${row.region_bucket}|${row.skill}|${row.tier}`, row.n);
+		known.add(row.region_bucket);
+	}
+
+	const statements = [];
+	for (const region of known) {
+		for (const skill of HELP_SKILLS) {
+			for (const tier of TIERS) {
+				const n = counts.get(`${region}|${skill}|${tier}`) ?? 0;
+				const band: Band = bandFor(n, tier as Tier);
+				statements.push(
+					env.DB.prepare(
+						`INSERT INTO capacity_bands (region_bucket, skill, tier, band, built_bucket, pack_epoch)
+						 VALUES (?1, ?2, ?3, ?4, ?5, 0)
+						 ON CONFLICT(region_bucket, skill, tier)
+						 DO UPDATE SET band = ?4, built_bucket = ?5`
+					).bind(region, skill, tier, band, builtBucket)
+				);
+			}
+		}
+	}
+	if (statements.length > 0) await env.DB.batch(statements);
+	safeLog('capacity_materialize', { count: statements.length, outcome: 'built' });
+}
+
+/**
+ * Drop offers past their lifetime.
+ *
+ * DELETES rather than hides. Hide-not-delete is an evidence and moderation rule,
+ * where losing something good is the harm; an expired offer is retention hygiene
+ * and keeping it only grows the set a compelled restore would yield.
+ *
+ * HONEST LIMIT: this is NOT a compulsion defence. D1 Time Travel is roughly 30
+ * days, so a compelled restore reaches deleted rows. What survives compulsion
+ * here is that the row never held anything from which a person could be reached
+ * in the first place.
+ */
+export async function sweepExpiredOffers(env: ApiEnv, nowEpoch: number): Promise<void> {
+	const res = await env.DB.prepare('DELETE FROM skills_registry WHERE expires_epoch <= ?1')
+		.bind(nowEpoch)
+		.run();
+	safeLog('offer_sweep', { count: res.meta?.changes ?? 0, outcome: 'swept' });
 }
 
 /**

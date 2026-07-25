@@ -47,7 +47,12 @@ export const FLIPPABLE = [
 	// threat, unlike every other write flag (maintainer decision, 2026-07-26):
 	// the onion requirement is the stronger gate, and this platform offers no
 	// state emergency number to fall back to.
-	'medical_broker'
+	'medical_broker',
+	// Helper offers and the published capacity band. Switch-on additionally waits
+	// on a vetting issuer existing, which packages/worker-lib/medical.ts refuses
+	// to supply while PINNED_VETTING_ISSUERS is empty, so every HIGH-tier offer
+	// refuses regardless of this flag.
+	'helper_registry'
 ] as const;
 
 /** Irreversible high-harm gates: built, but permanently OFF at this milestone. */

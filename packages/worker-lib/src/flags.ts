@@ -52,7 +52,11 @@ export const FLAG_NAMES = [
 	// Unlike every other write flag it is NOT closed by heightened threat: the
 	// routes already refuse over clearnet, which is strictly stronger and
 	// unconditional today, and closing them again would leave nothing behind.
-	'medical_broker'
+	'medical_broker',
+	// Helper offers and the published capacity band. Off means no offer is
+	// accepted and the read returns "not published" rather than NONE: absence is
+	// not a claim, and NONE is.
+	'helper_registry'
 ] as const;
 
 export type FlagName = (typeof FLAG_NAMES)[number];
