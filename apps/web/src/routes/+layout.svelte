@@ -6,6 +6,8 @@
 	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 	import Icon from '$lib/components/Icon.svelte';
 	import { network, watchNetwork } from '$lib/offline.svelte.ts';
+	import { outbox, watchOutbox } from '$lib/outbox-view.svelte.ts';
+	import { startOutboxRunner } from '$lib/outbox-runner';
 
 	let { children } = $props();
 
@@ -73,9 +75,15 @@
 		const textsize = localStorage.getItem('textsize');
 		if (textsize) document.documentElement.dataset.textsize = textsize;
 		const stopNetwork = watchNetwork();
+		// Nothing has ever driven the outbox: a killed upload persisted its cursor
+		// and was never picked back up. Flushes on `online` and on foreground.
+		const stopRunner = startOutboxRunner();
+		const stopOutbox = watchOutbox();
 		return () => {
 			media.removeEventListener('change', applyTheme);
 			stopNetwork();
+			stopRunner();
+			stopOutbox();
 		};
 	});
 </script>
@@ -109,6 +117,14 @@
 
 	{#if !network.online}
 		<p class="offline-strip" role="status">{m.offline_banner()}</p>
+	{/if}
+
+	<!-- COUNT-FREE ON PURPOSE. "3 items, 48 MB" tells anyone who picks up this
+	     phone that its owner is holding undelivered documentation, and how much.
+	     The strip says only that something is waiting; the detail lives on
+	     /document, where the user chose to look. -->
+	{#if outbox.pending}
+		<p class="offline-strip" role="status">{m.outbox_waiting()}</p>
 	{/if}
 
 	<main id="main">

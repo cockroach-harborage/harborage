@@ -40,6 +40,17 @@ function db(): Promise<IDBPDatabase> {
 	return dbP;
 }
 
+/**
+ * Release this module's handle on the identity database. It is a SECOND
+ * connection to the same database identity.ts owns, and `deleteDatabase` blocks
+ * silently while either is open, so the erase must close both.
+ */
+export async function closeIntakeKeyDb(): Promise<void> {
+	const pending = dbP;
+	dbP = null;
+	if (pending) (await pending).close();
+}
+
 function unhex(s: string): Uint8Array {
 	const out = new Uint8Array(s.length / 2);
 	for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(s.slice(i * 2, i * 2 + 2), 16);

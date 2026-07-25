@@ -8,6 +8,7 @@
  * user later chooses to send AND document_intake is on.
  */
 import { openDB, type IDBPDatabase } from 'idb';
+import type { OriginalStatus } from '@harborage/outbox/types';
 import type { IncidentType } from '$lib/incident-types';
 
 export type DocumentKind = 'photo' | 'note' | 'audio';
@@ -51,6 +52,20 @@ export interface LocalDocument {
 	confirmedDerivativeSha?: string;
 	/** Set once the record has been sent off device (only possible when document_intake is on). */
 	sent?: boolean;
+	/**
+	 * Custody of the pristine original (ARCHITECTURE §19:1266-1268).
+	 *
+	 * Lives on the document rather than only on the queue row because the row is
+	 * deleted once the upload completes, while the custody chain and any export
+	 * still need to know whether the vault actually holds these bytes. A document
+	 * is never presented as evidence-backed until this reads `vaulted`.
+	 *
+	 * Optional, and absent on records written before this field existed. No
+	 * DB_VERSION bump: the stores are schemaless and adding a field is additive,
+	 * whereas touching the upgrade path risks a sealed original that exists
+	 * nowhere else.
+	 */
+	originalStatus?: OriginalStatus;
 	derivative?: Derivative;
 	original?: SealedOriginal;
 }
@@ -141,10 +156,22 @@ class LocalDocumentStore {
 		await (await this.open()).delete(QUARANTINE, id);
 	}
 
-	/** Panic-wipe: destroy every on-device document AND every quarantined capture. */
+	/** Device erase: destroy every on-device document AND every quarantined capture. */
 	async wipeAll(): Promise<void> {
 		const db = await this.open();
 		await Promise.all([db.clear(STORE), db.clear(QUARANTINE)]);
+	}
+
+	/**
+	 * Release the connection. `indexedDB.deleteDatabase` blocks silently while
+	 * any connection is open, so the erase clears the stores and then quietly
+	 * fails to remove the database without this. Dropping the cached handle
+	 * means a later call reopens rather than reusing a closed one.
+	 */
+	async close(): Promise<void> {
+		const pending = this.db;
+		this.db = null;
+		if (pending) (await pending).close();
 	}
 }
 

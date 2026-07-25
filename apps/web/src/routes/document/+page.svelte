@@ -7,11 +7,17 @@
 	import { documents, type LocalDocument } from '$lib/documents';
 	import { incidentTypeLabel } from '$lib/incident-types';
 	import { getIntakeStatus, sendRecord } from '$lib/uploads';
+	import { cancelItem, enqueue, listOutbox, type OutboxRow } from '$lib/outbox-runner';
+	import { outbox, tryNow } from '$lib/outbox-view.svelte.ts';
+	import type { ProgressView } from '$lib/outbox-core';
 	import { IdbOutboxStore } from '@harborage/outbox';
 
 	let items = $state<LocalDocument[]>([]);
 	let loaded = $state(false);
 	let thumbs = $state(new Map<string, string>());
+	/** Queue rows by document id, so each row can show where its send got to. */
+	let queued = $state(new Map<string, OutboxRow>());
+	let storageWarning = $state('');
 	// Off-device send is hidden unless document_intake is on (defaults off offline).
 	let canSend = $state(false);
 	let sendingId = $state<string | null>(null);
@@ -35,6 +41,13 @@
 			sendingId = null;
 			return;
 		}
+		// Ask for durable storage and report the headroom before the upload
+		// starts. The verdict warns and never blocks: a phone that may evict the
+		// sealed original is exactly the phone whose owner most needs it sent.
+		const { storage } = await enqueue(fresh);
+		if (storage === 'insufficient') storageWarning = m.outbox_storage_full();
+		else if (storage === 'not_persisted' || storage === 'tight')
+			storageWarning = m.outbox_storage_warn();
 		const outcome = await sendRecord(fresh, new IdbOutboxStore(), fetch, turnstileToken);
 		if (outcome === 'sent') {
 			fresh.sent = true;
@@ -60,12 +73,57 @@
 		const list = await documents.list();
 		makeThumbs(list);
 		items = list;
+		queued = new Map((await listOutbox()).map((row) => [row.id, row]));
 		loaded = true;
 	}
 
 	async function remove(id: string) {
+		// Cancel the queue row FIRST. Deleting the document alone orphaned it, and
+		// the next flush then read the row as a sealed original that had vanished
+		// from the phone — the spoliation signal, raised by an ordinary delete.
+		await cancelItem(id);
 		await documents.delete(id);
 		await reload();
+	}
+
+	async function stopSending(id: string) {
+		// Stops the upload. Deliberately does NOT touch the document: the
+		// ciphertext lives on the record, shared with the kept-on-phone copy.
+		await cancelItem(id);
+		await reload();
+	}
+
+	async function retryNow() {
+		await tryNow();
+		await reload();
+	}
+
+	/** Progress copy for one queue row. Params only where the copy takes them. */
+	function progressText(p: ProgressView): string {
+		switch (p.key) {
+			case 'outbox_needs_you':
+				return m.outbox_needs_you();
+			case 'outbox_step_registered':
+				return m.outbox_step_registered();
+			case 'outbox_step_derivative':
+				return m.outbox_step_derivative();
+			case 'outbox_step_vaulting':
+				return m.outbox_step_vaulting({ sent: p.sentMb ?? '0', total: p.totalMb ?? '0' });
+			case 'outbox_step_vaulted':
+				return m.outbox_step_vaulted();
+			case 'outbox_retry_soon':
+				return m.outbox_retry_soon();
+			case 'outbox_stopped_trying':
+				return m.outbox_stopped_trying();
+		}
+	}
+
+	/** Custody of the pristine original, stated on every row that has one. */
+	function custodyText(r: LocalDocument): string {
+		if (r.originalStatus === 'lost') return m.outbox_lost();
+		if (r.originalStatus === 'vaulted') return m.outbox_step_vaulted();
+		if (r.original) return m.outbox_on_device_only();
+		return '';
 	}
 
 	function dateLabel(r: LocalDocument): string {
@@ -116,6 +174,14 @@
 							? ` · ${m.document_sent()}`
 							: ''}</span
 					>
+					{#if queued.get(r.id)}
+						<span class="card-sub" data-testid="outbox-progress-{r.id}"
+							>{progressText(queued.get(r.id)!.progress)}</span
+						>
+					{/if}
+					{#if custodyText(r)}
+						<span class="card-sub" data-testid="custody-{r.id}">{custodyText(r)}</span>
+					{/if}
 				</span>
 				{#if canSend && !r.sent}
 					<button
@@ -125,12 +191,32 @@
 						onclick={() => handleSend(r)}>{sendingId === r.id ? m.sending() : m.send_archive()}</button
 					>
 				{/if}
+				{#if queued.has(r.id)}
+					<button type="button" class="rec-remove" onclick={() => stopSending(r.id)}
+						>{m.outbox_stop()}</button
+					>
+				{/if}
 				<button type="button" class="rec-remove" onclick={() => remove(r.id)}
 					>{m.document_remove()}</button
 				>
 			</div>
 		{/each}
 	</div>
+	{#if queued.size > 0}
+		<div class="check">
+			<p class="muted">{m.outbox_stop_note()}</p>
+			<button
+				type="button"
+				class="rec-send"
+				data-testid="outbox-try-now"
+				disabled={outbox.busy}
+				onclick={retryNow}>{m.outbox_try_now()}</button
+			>
+		</div>
+	{/if}
+	{#if storageWarning}
+		<p class="muted" role="status" data-testid="storage-warning">{storageWarning}</p>
+	{/if}
 	<!-- One widget for the whole list, not one per row: a single challenge is
 	     solved once and its token spent on the next send. Rendered only when a
 	     sitekey exists, and the send stays disabled until a token arrives. -->
