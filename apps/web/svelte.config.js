@@ -66,7 +66,17 @@ const config = {
 			}
 		},
 		prerender: {
-			entries: ['/', '/hi', '/limits', '/hi/limits']
+			// /archive/verify is deliberately unlinked from the tab bar: it is for
+			// someone checking a record they were handed, not a browse destination.
+			// The crawler cannot find it, so it is named here or it never renders.
+			entries: [
+				'/',
+				'/hi',
+				'/limits',
+				'/hi/limits',
+				'/archive/verify',
+				'/hi/archive/verify'
+			]
 		}
 	}
 };
