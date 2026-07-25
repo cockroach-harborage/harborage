@@ -14,6 +14,7 @@ import { NONCE_LENGTH as SEALED_BOX_NONCE_LENGTH, sealTo } from '@harborage/cryp
 import { ALG_SEALED_BOX_X25519, frameEnvelope } from '@harborage/worker-lib/envelope';
 import { credentialHeaders } from '$lib/credential';
 import { resolveIntakeKey } from '$lib/intake-key';
+import { completeStatusOutcome } from '$lib/outbox-core';
 import {
 	BlobCipherSource,
 	MultipartUploader,
@@ -104,17 +105,16 @@ class MediaPresignClient implements PresignClient {
 			{ key: cursor.key, uploadId: cursor.uploadId, parts: cursor.parts.map((p) => ({ n: p.n, etag: p.etag })) },
 			this.fetchFn
 		);
-		if (res.ok) return;
 		// Map the status HONESTLY. This used to call every non-2xx
 		// `no_such_upload`, which sends the uploader down the restart path: it
 		// HEADs for the object, misses, drops the cursor and re-uploads every
 		// part from zero. A transient 429 or 502 after 40 minutes of 2G would
 		// silently throw away the whole upload. Only a genuinely gone upload
-		// justifies that.
-		if (res.status === 404 || res.status === 409)
-			throw new TransportError('no_such_upload', `complete ${res.status}`);
-		if (res.status === 400) throw new TransportError('invalid_part', `complete ${res.status}`);
-		throw new TransportError('retryable', `complete ${res.status}`);
+		// justifies that. The mapping lives in outbox-core so it is directly
+		// testable rather than reachable only through a live Response.
+		const outcome = completeStatusOutcome(res.status);
+		if (outcome === 'ok') return;
+		throw new TransportError(outcome, `complete ${res.status}`);
 	}
 	async abortMultipart(cursor: MultipartCursor): Promise<void> {
 		await postJson('/media/abort', { key: cursor.key, uploadId: cursor.uploadId }, this.fetchFn);
@@ -181,30 +181,94 @@ function metadataEnvelope(record: LocalDocument, intakeKey: Uint8Array): Uint8Ar
 
 export type SendOutcome = 'sent' | 'not_open' | 'failed';
 
-/**
- * Send a keep-on-phone record off device: register the sealed metadata, then
- * (for media records) upload the redacted derivative and the sealed original.
- * Returns 'not_open' when document_intake is OFF (the Worker returns 403).
- */
-export async function sendRecord(
-	record: LocalDocument,
-	store: OutboxStore,
-	fetchFn: typeof fetch = fetch,
-	turnstileToken = ''
-): Promise<SendOutcome> {
-	const media = new MediaPresignClient(fetchFn);
-	const transport = new R2PartTransport(fetchFn);
-	const uploader = new MultipartUploader(store, media, transport);
+/** PresignClient over the media Worker, rebuilt per flush. Holds no state. */
+export function newPresignClient(fetchFn: typeof fetch = fetch): PresignClient {
+	return new MediaPresignClient(fetchFn);
+}
 
-	const status = await getIntakeStatus(fetchFn);
+/** Direct-to-R2 part transport, rebuilt per flush. Holds no state. */
+export function newPartTransport(fetchFn: typeof fetch = fetch): PartTransport {
+	return new R2PartTransport(fetchFn);
+}
+
+/**
+ * The queue row for a record. Kept separate from `sendRecord` so the runner can
+ * mint one at enqueue and the flush can rebuild everything else around a row
+ * read back from IndexedDB.
+ *
+ * `maxAge` matches the `abort-incomplete-multipart-30d` lifecycle rule on the
+ * evidence-vault bucket (infra/r2.tf). If one moves the other must, or the
+ * client keeps retrying an upload R2 has already collected.
+ */
+export const OUTBOX_MAX_AGE_MS = 30 * 24 * 3600 * 1000;
+
+export function makeOutboxItem(record: LocalDocument): OutboxItem {
+	return {
+		id: record.id,
+		state: 'queued',
+		derivative: {
+			sha256: record.derivative?.sha256 ?? '',
+			size: record.derivative?.blob.size ?? 0,
+			mime: record.derivative?.mime ?? '',
+			uploaded: false
+		},
+		original: {
+			sha256: record.original?.sha256 ?? '',
+			size: record.original?.sealed.size ?? 0,
+			mime: record.original?.mime ?? ''
+		},
+		originalStatus: record.original ? 'on_device_only' : 'none',
+		attempts: 0,
+		nextEarliestRetry: 0,
+		createdAt: record.createdAt,
+		maxAge: OUTBOX_MAX_AGE_MS
+	};
+}
+
+export interface AdvanceDeps {
+	store: OutboxStore;
+	fetchFn?: typeof fetch;
+	/** Live single-use personhood token. Only the register phase consumes it. */
+	turnstileToken?: string;
+	/** Pre-read status, so a flush of ten items reads the flags once. */
+	status?: IntakeStatus;
+}
+
+/**
+ * Drive one queue row as far as the link allows, rebuilding the orchestrator
+ * ports from the persisted item plus the record its bytes live on.
+ *
+ * The ports used to be closures over an in-memory `record` created inside
+ * `sendRecord`, which is why nothing could ever resume an upload after a page
+ * reload: there was no way to reconstruct them from storage.
+ */
+export async function advanceRecord(
+	item: OutboxItem,
+	record: LocalDocument,
+	deps: AdvanceDeps
+): Promise<{ item: OutboxItem; outcome: SendOutcome }> {
+	const fetchFn = deps.fetchFn ?? fetch;
+	const turnstileToken = deps.turnstileToken ?? '';
+	const uploader = new MultipartUploader(
+		deps.store,
+		newPresignClient(fetchFn),
+		newPartTransport(fetchFn)
+	);
+
+	const status = deps.status ?? (await getIntakeStatus(fetchFn));
 	const intake = await resolveIntakeKey(status.intake_key);
 	// No key published, or a key that changed since we pinned it: refuse rather
 	// than seal to something unverified. Sending to a swapped key would hand the
 	// note to whoever swapped it.
-	if (intake.status !== 'ok') return 'not_open';
+	if (intake.status !== 'ok') return { item, outcome: 'not_open' };
 
 	const register = {
 		async register(): Promise<string> {
+			// Belt and braces against a background flush reaching this phase: the
+			// runner already filters out receipt-less items, and a register with no
+			// live token is a guaranteed 403. Fail as "not open" rather than burn
+			// an attempt and the user's data on it.
+			if (turnstileToken === '') throw new NotOpenError();
 			const envelope = metadataEnvelope(record, intake.publicKey);
 			// The proof of possession binds to these exact bytes, so build it from
 			// the envelope we are about to send rather than from anything derived.
@@ -251,40 +315,40 @@ export async function sendRecord(
 		}
 	};
 
-	const item: OutboxItem = {
-		id: record.id,
-		state: 'queued',
-		derivative: {
-			sha256: record.derivative?.sha256 ?? '',
-			size: record.derivative?.blob.size ?? 0,
-			mime: record.derivative?.mime ?? '',
-			uploaded: false
-		},
-		original: {
-			sha256: record.original?.sha256 ?? '',
-			size: record.original?.sealed.size ?? 0,
-			mime: record.original?.mime ?? ''
-		},
-		originalStatus: record.original ? 'on_device_only' : 'none',
-		attempts: 0,
-		nextEarliestRetry: 0,
-		createdAt: record.createdAt,
-		maxAge: 30 * 24 * 3600 * 1000
-	};
-	await store.put(item);
-
-	const orchestrator = new OutboxOrchestrator(store, register, derivative, uploader, cipher);
+	const orchestrator = new OutboxOrchestrator(deps.store, register, derivative, uploader, cipher);
 	try {
 		// Note-only and vault-only records still go through the orchestrator. The
 		// previous shortcut called register() directly, so the receipt was never
 		// persisted and the row sat at `queued` forever -- indistinguishable from
 		// a send that never happened.
-		await orchestrator.advance(item);
-		return 'sent';
+		const advanced = await orchestrator.advance(item);
+		return { item: advanced, outcome: 'sent' };
 	} catch (e) {
-		if (e instanceof NotOpenError) return 'not_open';
-		return 'failed';
+		if (e instanceof NotOpenError) return { item, outcome: 'not_open' };
+		return { item, outcome: 'failed' };
 	}
+}
+
+/**
+ * Send a keep-on-phone record off device: register the sealed metadata, then
+ * (for media records) upload the redacted derivative and the sealed original.
+ * Returns 'not_open' when document_intake is OFF (the Worker returns 403).
+ */
+export async function sendRecord(
+	record: LocalDocument,
+	store: OutboxStore,
+	fetchFn: typeof fetch = fetch,
+	turnstileToken = ''
+): Promise<SendOutcome> {
+	// Resume the existing row rather than replacing it. This used to mint a
+	// fresh `queued` item unconditionally, so a second tap on a half-uploaded
+	// document discarded the persisted multipart cursor AND re-registered the
+	// incident -- two records for one event, and forty minutes of 2G thrown
+	// away by an impatient tap.
+	const item = (await store.get(record.id)) ?? makeOutboxItem(record);
+	await store.put(item);
+	const { outcome } = await advanceRecord(item, record, { store, fetchFn, turnstileToken });
+	return outcome;
 }
 
 class NotOpenError extends Error {}

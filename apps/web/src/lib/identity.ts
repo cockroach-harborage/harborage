@@ -429,3 +429,15 @@ export async function wipe(): Promise<void> {
 		throw new IdentityStorageError(e);
 	}
 }
+
+/**
+ * Release this module's connection so the database can actually be removed.
+ * `indexedDB.deleteDatabase` blocks silently while any connection is open, and
+ * intake-key.ts holds a second handle on the same database that must be closed
+ * too. Clearing the stores does not need this; deleting the database does.
+ */
+export async function closeIdentityDb(): Promise<void> {
+	const pending = dbP;
+	dbP = null;
+	if (pending) (await pending).close();
+}
