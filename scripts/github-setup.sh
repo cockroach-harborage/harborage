@@ -25,7 +25,10 @@ gh api -X PUT "repos/${REPO}/vulnerability-alerts" >/dev/null || true
 echo "==> Branch protection on main"
 gh api -X PUT "repos/${REPO}/branches/main/protection" --input - >/dev/null <<'EOF'
 {
-  "required_status_checks": { "strict": true, "contexts": ["ci", "e2e"] },
+  "required_status_checks": {
+    "strict": true,
+    "contexts": ["ci", "e2e", "zizmor", "gitleaks", "tofu-validate"]
+  },
   "enforce_admins": true,
   "required_pull_request_reviews": null,
   "restrictions": null,
@@ -45,6 +48,13 @@ else
   echo "==> required_signatures SKIPPED (set ENFORCE_SIGNATURES=1 after registering the signing key)"
 fi
 
-echo "Done. Note: required_pull_request_reviews stays null while the project has a"
-echo "single maintainer; raise to >=2 reviewers + CODEOWNERS enforcement as soon as"
-echo "a second maintainer exists (CLAUDE.md sensitive-path rule)."
+echo "Done."
+echo
+echo "Required checks now include zizmor, gitleaks and tofu-validate. They already"
+echo "ran on every PR; until now they could fail red and the PR still merged."
+echo
+echo "required_pull_request_reviews stays null while the project has a single"
+echo "maintainer. That is honest, not a gap to paper over: with one person the"
+echo ">=2-reviewer property does not exist, and a second account or a bot approver"
+echo "would produce the appearance of the control without the substance. Raise it"
+echo "the day a second maintainer exists (CLAUDE.md sensitive-path rule)."

@@ -508,6 +508,28 @@ Every action pinned to a full 40-char SHA (zizmor/ratchet enforce); **CODEOWNERS
 
 ## 12. Build Order for Session 3
 
+> **Sequencing correction (2026-07-25, solo maintainer).** An earlier plan in
+> this session proposed inserting an "M1.5 content + ceremony" milestone before
+> M2, on the reasoning that the deployed app serves almost nothing and the
+> blockers are content rather than code. That reasoning was right about the
+> blockers and **wrong about the remedy**: nearly every item in it (counsel
+> sign-off, medic review, m-of-n co-signers, provider consent for directory
+> seed) needs a second person, and the project will not have one until after the
+> full feature build. So the milestone table below stands as written, and **M2 is
+> next**. This is exactly what §18.2 prescribes — the build is never gated, only
+> the switch-on is. The solo-doable manual items (single-key ceremony, canary
+> signing, credential minting) are written up in
+> [docs/maintainer-walkthrough.md](./docs/maintainer-walkthrough.md) and are not
+> blockers on building.
+>
+> One consequence to hold on to: `incidents_publish` cannot be switched on at the
+> end of M2. The materializer admits only `Human-Verified` or
+> `Community-Corroborated`; the first is Layer-B and needs reviewers, the second
+> needs AI concurrence (which ships OFF and is never silently waived) plus K=4
+> corroborators above `r_gate` that new accounts cannot reach without
+> human-settled outcomes. M2 delivers the floor and the machinery, not a
+> published public record.
+
 All domains are *architected*; they are **not all built for v1**. A volunteer team ships a coherent core sequenced behind the legal/organizational critical path. **Each data-holding milestone is gated on BOTH its counsel interlock AND the existence of the human org that operates it.**
 
 > **Updated (Session 2.5):** the **autonomous AI + community trust engine is M1 day-1 core** (§15), not deferred — the human moderation org is a **hardening** milestone (A0→A3), not a launch prerequisite, for the reversible surface; only the irreversible m-of-n gates (individual naming, unredaction, precise-reveal, permanent delete) stay human-gated and ship OFF. The **public Resource Directory** (seed pack + zero-account offline browse) is **M1** (see PRD §14); the **Community Feed** is **M3**; the **Evidence Archive** reversible parts (dedup / transcode / data model / display) are **M3**, with Bucket Locks + off-CF replication + IPFS counsel-gated (§16). New day-1 components: `VerificationStateDO`, `SpendCapDO`, `CoordinationWindowDO` (ephemeral CIB, no persisted graph), `ReReviewQueueDO`, `FLAGS` KV, `resource_entries` D1 table. IaC + minimal manual surface per §17 + [RUNBOOK.md](./RUNBOOK.md).
