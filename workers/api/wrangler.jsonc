@@ -18,7 +18,8 @@
 			{ "name": "RATE_LIMIT", "class_name": "RateLimit" },
 			{ "name": "VERIFICATION_STATE", "class_name": "VerificationState" },
 			{ "name": "SPEND_CAP", "class_name": "SpendCap" },
-			{ "name": "RE_REVIEW", "class_name": "ReReviewQueue" }
+			{ "name": "RE_REVIEW", "class_name": "ReReviewQueue" },
+			{ "name": "CUSTODY_CHAIN", "class_name": "CustodyChain" }
 		]
 	},
 	// SQLite-backed (mandatory for new namespaces, 2026-07-09) but kept wholly
@@ -30,7 +31,8 @@
 	"migrations": [
 		{ "tag": "v1", "new_sqlite_classes": ["RateLimit"] },
 		{ "tag": "v2", "new_sqlite_classes": ["VerificationState"] },
-		{ "tag": "v3", "new_sqlite_classes": ["SpendCap", "ReReviewQueue"] }
+		{ "tag": "v3", "new_sqlite_classes": ["SpendCap", "ReReviewQueue"] },
+		{ "tag": "v4", "new_sqlite_classes": ["CustodyChain"] }
 	],
 	// The Turnstile sitekey is PUBLIC (it is embedded in the page). It travels as
 	// a var so GET /api/intake/status can hand it to the client alongside the

@@ -53,6 +53,8 @@ export interface ApiEnv extends FlagBindings {
 	SPEND_CAP: DurableObjectNamespace;
 	/** One alarm for the whole re-review queue, never one per item. */
 	RE_REVIEW: DurableObjectNamespace;
+	/** Append-only custody ledger + Merkle checkpoints (ARCHITECTURE §7.2). */
+	CUSTODY_CHAIN: DurableObjectNamespace;
 	MODERATION_BULK: Queue;
 	LIFE_SAFETY: Queue;
 	/** Read cache of the signed Key Directory + Revocation List (notice verify). */
