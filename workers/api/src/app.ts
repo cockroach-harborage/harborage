@@ -7,11 +7,24 @@
  */
 import { Hono } from 'hono';
 import {
+	ALG_BROKER_ONESHOT,
 	ALG_VAULT_KEYRING,
 	isSealedEnvelope,
+	maxEnvelopeLen,
 	unframeEnvelope,
 	MAX_ENVELOPE_LEN
 } from '@harborage/worker-lib/envelope';
+import {
+	BROKER_FRAME_LEN,
+	brokerName,
+	brokerRef,
+	handleRefOf,
+	mintInboxToken,
+	padPollResponse,
+	parseBrokerFrame,
+	verifyInboxToken,
+	type BrokerFrame
+} from '@harborage/worker-lib/broker';
 import { featureAvailable, flagEnabled } from '@harborage/worker-lib/flags';
 import { coarseMs, safeLog, statusClass } from '@harborage/worker-lib/safe-log';
 import { verifyTurnstile } from '@harborage/worker-lib/turnstile';
@@ -20,7 +33,12 @@ import {
 	verifyRequestCredential,
 	type CredentialResult
 } from '@harborage/worker-lib/cap-cert';
-import { admitCredential, bucketKey, broadTiersOk } from '@harborage/worker-lib/ratelimit';
+import {
+	admitCredential,
+	admitOneShot,
+	bucketKey,
+	broadTiersOk
+} from '@harborage/worker-lib/ratelimit';
 import type { Compartment } from '@harborage/crypto/compartments';
 import { advanceProbation, bandsOf, dedupVerdict, isDhash64 } from '@harborage/worker-lib/archive';
 import { assembleBsaExport } from '@harborage/worker-lib/archive';
@@ -83,7 +101,10 @@ app.use('*', async (c, next) => {
  * Keyed off a hash of the connecting IP, which is never logged or persisted —
  * it only picks which shard to charge.
  */
-async function broadOk(c: { req: { header(name: string): string | undefined; raw: Request }; env: ApiEnv }) {
+async function broadOk(c: {
+	req: { header(name: string): string | undefined; raw: Request };
+	env: ApiEnv;
+}) {
 	const keyHashHex = await bucketKey(c.req.header('CF-Connecting-IP') ?? 'unknown');
 	const asn = (c.req.raw as { cf?: { asn?: number } }).cf?.asn;
 	return broadTiersOk(c.env, { keyHashHex, asn });
@@ -120,6 +141,68 @@ async function credentialOk(
 	return { ok: verdict === 'ok', outcome: verdict };
 }
 
+/**
+ * The same, for a route served by a PER-REQUEST identity.
+ *
+ * A SEPARATE FUNCTION, not an optional parameter on credentialOk. A defaulted
+ * `{ oneShot?: boolean }` is forgettable, and forgetting it on a brokered route
+ * silently restores two things at once: an hour-long reusable credential that
+ * links every brokered request it signs, and a fresh Durable Object per request
+ * from cap:-addressing. Two names, one grep.
+ */
+async function oneShotCredentialOk(
+	c: { req: { raw: Request }; env: ApiEnv },
+	body: Uint8Array,
+	compartment: Compartment
+): Promise<{ ok: boolean; outcome: string }> {
+	const result: CredentialResult = await verifyRequestCredential(c.req.raw, body, {
+		nowMs: Date.now(),
+		compartment,
+		admission: 'one-shot'
+	});
+	if (!result.ok) return { ok: false, outcome: result.reason };
+
+	const verdict = await admitOneShot(c.env, {
+		nonceHex: result.nonceHex,
+		retainMs: nonceRetentionMs({})
+	});
+	return { ok: verdict === 'ok', outcome: verdict };
+}
+
+/**
+ * Structural checks every brokered route runs BEFORE it touches a binding.
+ *
+ * Uniform framing is the confidentiality mechanism, not tidiness: every brokered
+ * body is exactly one frame in BOTH phases, so an announce and a reveal are
+ * indistinguishable by size to anyone watching the connection. That also makes
+ * the rule trivially testable with no bindings at all, which is what stops a
+ * later credential check from shadowing it (the /api/archive/dedup lesson: with
+ * the credential first, a malformed body returned 401 and a test asserting "not
+ * 200" passed with the shape rule deleted).
+ */
+async function brokerBody(c: {
+	req: { header(name: string): string | undefined; arrayBuffer(): Promise<ArrayBuffer> };
+}): Promise<{ raw: Uint8Array; frame: BrokerFrame } | Response> {
+	const ct = c.req.header('content-type') ?? '';
+	if (!ct.includes('application/octet-stream'))
+		return new Response('sealed envelope required', { status: 415 });
+	const declared = Number(c.req.header('content-length') ?? '0');
+	if (declared > maxEnvelopeLen(ALG_BROKER_ONESHOT))
+		return new Response('too large', { status: 413 });
+
+	const raw = new Uint8Array(await c.req.arrayBuffer());
+	// Exact length, not a ceiling. A short frame is not merely malformed: it
+	// would reintroduce the size channel the padding exists to close.
+	if (raw.length !== BROKER_FRAME_LEN)
+		return new Response('sealed envelope required', { status: 400 });
+	const framing = unframeEnvelope(raw);
+	if (!framing || framing.algId !== ALG_BROKER_ONESHOT)
+		return new Response('sealed envelope required', { status: 400 });
+	const frame = parseBrokerFrame(raw);
+	if (!frame) return new Response('sealed envelope required', { status: 400 });
+	return { raw, frame };
+}
+
 // --- Sensitive intake: sealed-envelope-only, enqueue-and-return-fast ---------
 // POST /api/incidents/register — structural sealed-body enforcement (§17.5).
 app.post('/api/incidents/register', async (c) => {
@@ -137,7 +220,9 @@ app.post('/api/incidents/register', async (c) => {
 	//    throttled before it can spend a KV read or a signature verification.
 	if (!(await broadOk(c))) return c.text('slow down', 429);
 	if (
-		!(await featureAvailable(c.env.FLAGS, 'document_intake', { disabledUnderHeightenedThreat: true }))
+		!(await featureAvailable(c.env.FLAGS, 'document_intake', {
+			disabledUnderHeightenedThreat: true
+		}))
 	)
 		return c.text('not open', 403);
 
@@ -184,7 +269,9 @@ app.post('/api/evidence/keyring', async (c) => {
 
 	if (!(await broadOk(c))) return c.text('slow down', 429);
 	if (
-		!(await featureAvailable(c.env.FLAGS, 'evidence_vault', { disabledUnderHeightenedThreat: true }))
+		!(await featureAvailable(c.env.FLAGS, 'evidence_vault', {
+			disabledUnderHeightenedThreat: true
+		}))
 	)
 		return c.text('not open', 403);
 
@@ -384,14 +471,17 @@ app.post('/api/archive/dedup', async (c) => {
 	const keys = Object.keys(body);
 	// Exact shape, not a subset. An extra key is a question we did not agree to
 	// answer, and silently ignoring it is how a wider question sneaks in.
-	if (keys.length !== 1 || keys[0] !== 'derivative_sha256') return c.json({ error: 'bad body' }, 400);
+	if (keys.length !== 1 || keys[0] !== 'derivative_sha256')
+		return c.json({ error: 'bad body' }, 400);
 	const sha = (body as { derivative_sha256: unknown }).derivative_sha256;
 	if (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha))
 		return c.json({ error: 'bad body' }, 400);
 
 	if (!(await broadOk(c))) return c.text('slow down', 429);
 	if (
-		!(await featureAvailable(c.env.FLAGS, 'archive_publish', { disabledUnderHeightenedThreat: true }))
+		!(await featureAvailable(c.env.FLAGS, 'archive_publish', {
+			disabledUnderHeightenedThreat: true
+		}))
 	)
 		return c.text('not open', 403);
 
@@ -419,7 +509,9 @@ app.post('/api/archive/dedup', async (c) => {
 app.post('/api/archive/dispute', async (c) => {
 	if (!(await broadOk(c))) return c.text('slow down', 429);
 	if (
-		!(await featureAvailable(c.env.FLAGS, 'archive_publish', { disabledUnderHeightenedThreat: true }))
+		!(await featureAvailable(c.env.FLAGS, 'archive_publish', {
+			disabledUnderHeightenedThreat: true
+		}))
 	)
 		return c.text('not open', 403);
 
@@ -471,11 +563,7 @@ app.get('/api/archive/custody/:anchor', async (c) => {
 		const ns = c.env.CUSTODY_CHAIN;
 		const stub = ns.get(ns.idFromName(anchor)) as unknown as CustodyChainStub;
 		const lines = await stub.slice(anchor);
-		return c.json(
-			{ anchor, custody: lines },
-			200,
-			{ 'cache-control': 'public, max-age=300' }
-		);
+		return c.json({ anchor, custody: lines }, 200, { 'cache-control': 'public, max-age=300' });
 	} catch {
 		// Degrade safe: a reader checking a record must not be told the item does
 		// not exist merely because a lookup failed.
@@ -492,7 +580,11 @@ app.get('/api/archive/custody/:anchor', async (c) => {
 app.get('/api/archive/export/:anchor', async (c) => {
 	const anchor = c.req.param('anchor');
 	if (!/^[0-9a-f]{64}$/.test(anchor)) return c.json({ error: 'bad anchor' }, 400);
-	if (!(await featureAvailable(c.env.FLAGS, 'archive_publish', { disabledUnderHeightenedThreat: true })))
+	if (
+		!(await featureAvailable(c.env.FLAGS, 'archive_publish', {
+			disabledUnderHeightenedThreat: true
+		}))
+	)
 		return c.json({ published: false }, 403);
 
 	const row = await c.env.DB.prepare(
@@ -576,6 +668,221 @@ app.get('/api/intake/status', async (c) => {
 	);
 });
 
+// --- Brokered mutual aid (PRD §4.8, §4.9; ARCHITECTURE §5.3) -----------------
+//
+// Four routes, one shape. Every body is EXACTLY one frame in both the announce
+// and the reveal phase, so the two are indistinguishable by size. The Broker and
+// Mailbox are memory-only and content-blind; the platform holds no key that
+// opens anything relayed here.
+//
+// NO safeLog OUTCOME ON THESE ROUTES, and on the poll route no safeLog at all
+// beyond the middleware's route + status class + coarse ms. gate-safelog would
+// allow an `outcome` field, but on the poll route any value distinguishing
+// delivered from empty writes into Cloudflare's logs exactly the bit the padding
+// spends 4 KiB per poll to hide.
+
+/** Broker stub surface, narrowed to what this Worker calls. */
+interface BrokerStub {
+	openNeed(
+		input: { category: string; commit: Uint8Array; seekerInbox: string; handle: Uint8Array },
+		nowMs?: number
+	): Promise<{ handleHex: string } | 'full' | 'bad-input'>;
+	claimNeed(
+		helperInbox: string,
+		category: string,
+		nowMs?: number
+	): Promise<{ handleHex: string; commit: Uint8Array } | null>;
+	accept(
+		handleHex: string,
+		helperInbox: string,
+		frame: Uint8Array,
+		nowMs?: number
+	): Promise<'ok' | 'taken' | 'unknown' | 'capped' | 'bad-frame'>;
+	reveal(handleHex: string, preimage: Uint8Array, nowMs?: number): Promise<Uint8Array | null>;
+	keepalive(nowMs?: number): Promise<void>;
+}
+
+interface MailboxStub {
+	deliver(frame: Uint8Array, nowMs?: number): Promise<'ok' | 'full' | 'bad-frame'>;
+	poll(nowMs?: number): Promise<Uint8Array | null>;
+}
+
+function randomBytes(n: number): Uint8Array {
+	const b = new Uint8Array(n);
+	crypto.getRandomValues(b);
+	return b;
+}
+
+/** The gate every aid route passes after its structural check. */
+async function aidGate(
+	c: { req: { raw: Request; header(name: string): string | undefined }; env: ApiEnv },
+	raw: Uint8Array
+): Promise<Response | null> {
+	if (!(await broadOk(c))) return new Response('slow down', { status: 429 });
+	if (!(await featureAvailable(c.env.FLAGS, 'aid_broker', { disabledUnderHeightenedThreat: true })))
+		return new Response('not open', { status: 403 });
+	const credential = await oneShotCredentialOk(c, raw, 'aid');
+	if (!credential.ok) return new Response('credential required', { status: 401 });
+	return null;
+}
+
+/** POST /api/aid/need — announce an open need, or reveal against an accepted one. */
+app.post('/api/aid/need', async (c) => {
+	const body = await brokerBody(c);
+	if (body instanceof Response) return body;
+	const refused = await aidGate(c, body.raw);
+	if (refused) return refused;
+	if (!(await verifyTurnstile(c.req.header('cf-turnstile-response'), c.env.TURNSTILE_SECRET)))
+		return c.text('verification failed', 403);
+
+	const ref = await brokerRef(c.env.BROKER_INBOX_MAC_KEY, body.frame.region, body.frame.category);
+	if (!ref) return c.text('not open', 403);
+	const ns = c.env.BROKER;
+	const broker = ns.get(ns.idFromName(brokerName(ref))) as unknown as BrokerStub;
+
+	const handle = randomBytes(16);
+	const inbox = await mintInboxToken(c.env.BROKER_INBOX_MAC_KEY, ref, handle, 0);
+	if (!inbox) return c.text('not open', 403);
+
+	const opened = await broker.openNeed({
+		category: body.frame.category,
+		commit: body.frame.commit,
+		seekerInbox: inbox,
+		handle
+	});
+	if (opened === 'full' || opened === 'bad-input') return c.text('not open', 503);
+	return c.json({ inbox, need_ref: bytesToB64u(handleRefOf(ref, handle)) }, 202, {
+		'cache-control': 'no-store'
+	});
+});
+
+/** POST /api/aid/offer — a responder announces availability and claims at most one need. */
+app.post('/api/aid/offer', async (c) => {
+	const body = await brokerBody(c);
+	if (body instanceof Response) return body;
+	const refused = await aidGate(c, body.raw);
+	if (refused) return refused;
+	if (!(await verifyTurnstile(c.req.header('cf-turnstile-response'), c.env.TURNSTILE_SECRET)))
+		return c.text('verification failed', 403);
+
+	const ref = await brokerRef(c.env.BROKER_INBOX_MAC_KEY, body.frame.region, body.frame.category);
+	if (!ref) return c.text('not open', 403);
+	const ns = c.env.BROKER;
+	const broker = ns.get(ns.idFromName(brokerName(ref))) as unknown as BrokerStub;
+
+	const helperHandle = randomBytes(16);
+	const helperInbox = await mintInboxToken(c.env.BROKER_INBOX_MAC_KEY, ref, helperHandle, 1);
+	if (!helperInbox) return c.text('not open', 403);
+
+	// AT MOST ONE. A responder who could see many open needs at once is a
+	// responder who could enumerate the board, which is the thing a brokered
+	// channel exists to prevent.
+	const claimed = await broker.claimNeed(helperInbox, body.frame.category);
+	return c.json(
+		{
+			inbox: helperInbox,
+			need_ref: claimed ? bytesToB64u(handleRefOf(ref, hexToBytes(claimed.handleHex))) : null
+		},
+		202,
+		{ 'cache-control': 'no-store' }
+	);
+});
+
+/** POST /api/aid/accept — a responder's sealed card. HELD, never delivered here. */
+app.post('/api/aid/accept', async (c) => {
+	const body = await brokerBody(c);
+	if (body instanceof Response) return body;
+	const refused = await aidGate(c, body.raw);
+	if (refused) return refused;
+
+	// Verified BEFORE any Durable Object is addressed, so a forged token costs
+	// zero instances.
+	const token = await verifyInboxToken(
+		c.env.BROKER_INBOX_MAC_KEY,
+		c.req.header('X-HB-Inbox') ?? ''
+	);
+	if (!token) return c.text('not open', 403);
+
+	const ns = c.env.BROKER;
+	const broker = ns.get(ns.idFromName(brokerName(token.brokerRef))) as unknown as BrokerStub;
+	const verdict = await broker.accept(
+		bytesToHex(body.frame.handleRef.subarray(5)),
+		c.req.header('X-HB-Inbox') ?? '',
+		body.raw
+	);
+	// One flat 202 for every outcome. Telling a responder that a need was already
+	// taken, or that their cap is spent, is a probe into board state.
+	return c.json({ ok: verdict === 'ok' }, 202, { 'cache-control': 'no-store' });
+});
+
+/**
+ * POST /api/aid/poll — collect whatever is waiting, in fixed time and fixed size.
+ *
+ * The body carries the inbox token and, for a seeker collecting an acceptance,
+ * the preimage of their own commitment. That second request is what makes
+ * exposure a deliberate, separately-ticked act rather than an automatic
+ * consequence of having posted a need.
+ *
+ * The Broker keepalive rides in parallel. A Durable Object with no in-flight
+ * request is evicted after 70 to 140 seconds of inactivity, and the poll goes to
+ * the MAILBOX, so without this the Broker sees no traffic between an offer and
+ * an accept and a match dies mid-handshake with its state gone.
+ */
+app.post('/api/aid/poll', async (c) => {
+	const body = await brokerBody(c);
+	if (body instanceof Response) return body;
+	const refused = await aidGate(c, body.raw);
+	if (refused) return refused;
+
+	const inboxHeader = c.req.header('X-HB-Inbox') ?? '';
+	const token = await verifyInboxToken(c.env.BROKER_INBOX_MAC_KEY, inboxHeader);
+	if (!token) return c.text('not open', 403);
+
+	const bns = c.env.BROKER;
+	const broker = bns.get(bns.idFromName(brokerName(token.brokerRef))) as unknown as BrokerStub;
+	const mns = c.env.MAILBOX;
+	const mailbox = mns.get(mns.idFromName(inboxHeader)) as unknown as MailboxStub;
+
+	// A non-zero preimage means "release the card you are holding for me".
+	const preimage = body.frame.commit;
+	const wantsRelease = preimage.some((b) => b !== 0);
+	const needHex = bytesToHex(body.frame.handleRef.subarray(5));
+
+	const [, delivered] = await Promise.all([
+		broker.keepalive(),
+		(async () => {
+			if (wantsRelease) {
+				const released = await broker.reveal(needHex, preimage);
+				if (released) await mailbox.deliver(released);
+			}
+			return mailbox.poll();
+		})()
+	]);
+
+	return new Response(padPollResponse(delivered, randomBytes(BROKER_FRAME_LEN)), {
+		status: 200,
+		headers: { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' }
+	});
+});
+
+function bytesToHex(b: Uint8Array): string {
+	let s = '';
+	for (const x of b) s += x.toString(16).padStart(2, '0');
+	return s;
+}
+
+function hexToBytes(s: string): Uint8Array {
+	const out = new Uint8Array(s.length / 2);
+	for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(s.slice(i * 2, i * 2 + 2), 16);
+	return out;
+}
+
+function bytesToB64u(b: Uint8Array): string {
+	let s = '';
+	for (const x of b) s += String.fromCharCode(x);
+	return btoa(s).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+}
+
 app.notFound((c) => c.text('not found', 404));
 
 /** Cron: rebuild the public incident index from admitted rows only. */
@@ -639,12 +946,7 @@ export async function sweepProbation(env: ApiEnv, todayBucket: string): Promise<
 		await env.DB.prepare(
 			'UPDATE archive_items SET probation_state = ?1, probation_due_bucket = ?2, rescan_count = ?3 WHERE original_sha256 = ?4'
 		)
-			.bind(
-				decision.state,
-				decision.nextDueBucket,
-				item.rescan_count + 1,
-				item.original_sha256
-			)
+			.bind(decision.state, decision.nextDueBucket, item.rescan_count + 1, item.original_sha256)
 			.run();
 	}
 	safeLog('probation_sweep', { count: (due.results ?? []).length, outcome: 'swept' });

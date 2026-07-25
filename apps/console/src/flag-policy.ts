@@ -34,7 +34,13 @@ export const FLIPPABLE = [
 	// Fingerprint-and-reference of off-platform media. Built with no fetch path
 	// at all, so flipping this stores a content id and a client fingerprint and
 	// nothing else. Re-hosting is a separate, counsel-gated decision.
-	'source_import'
+	'source_import',
+	// The brokered mutual-aid channel. Off means every /api/aid/* route refuses
+	// and no Broker or Mailbox instance is ever created. Flipping it is not
+	// sufficient on its own: BROKER_INBOX_MAC_KEY is absent, so every brokered
+	// route refuses for everyone regardless, which is the correct resting state
+	// until a broker is actually operated.
+	'aid_broker'
 ] as const;
 
 /** Irreversible high-harm gates: built, but permanently OFF at this milestone. */

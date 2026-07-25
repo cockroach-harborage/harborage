@@ -33,7 +33,7 @@
 //    not hold the key, never to keep quiet about holding it.
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { repoRoot, walk, read, fail } from './lib.mjs';
+import { repoRoot, walk, read, fail, handlerBlocks } from './lib.mjs';
 
 const registryPath = join(repoRoot, 'tools/gates/sensitive-endpoints.json');
 const problems = [];
@@ -218,6 +218,51 @@ for (const binding of declared.keys()) {
 		problems.push(
 			`platform_key ${binding} is declared but no binding by that name exists; drop the claim or restore the binding`
 		);
+	}
+}
+
+// --- Sensitive prefixes: no unregistered route under a sensitive path --------
+//
+// Everything above checks the entries that ARE in the registry. Nothing checked
+// the routes that are NOT, so an author could add POST /api/aid/leak taking
+// plain JSON and this gate would report success over a file that had never
+// heard of it. Enumerating the prefixes inverts that: under a sensitive path, a
+// route must either declare its custody class or record why it needs none.
+const prefixes = registry.sensitive_prefixes ?? [];
+const exempt = new Map();
+for (const raw of registry.unsealed_exempt ?? []) {
+	if (typeof raw !== 'object' || raw === null || typeof raw.endpoint !== 'string') {
+		problems.push(
+			`unsealed_exempt entry is not an object with an "endpoint": ${JSON.stringify(raw)}`
+		);
+		continue;
+	}
+	if (typeof raw.why !== 'string' || raw.why.trim().length < 40) {
+		problems.push(
+			`unsealed_exempt ${raw.endpoint} — "why" must be at least 40 characters saying what the body carries and why no custody claim applies. An exemption nobody can reread is one the next person copies`
+		);
+	}
+	exempt.set(raw.endpoint, raw.why);
+}
+
+const registeredEndpoints = new Set(entries.map((e) => e?.endpoint).filter(Boolean));
+if (prefixes.length > 0) {
+	for (const block of handlerBlocks(routerText)) {
+		if (!prefixes.some((p) => block.path.startsWith(p))) continue;
+		const endpoint = `${block.method} ${block.path}`;
+		if (registeredEndpoints.has(endpoint) || exempt.has(endpoint)) continue;
+		problems.push(
+			`${endpoint} sits under a sensitive prefix but is in neither "endpoints" nor "unsealed_exempt". Declare its custody class, or record why its body carries nothing to have custody of`
+		);
+	}
+	// A stale exemption is a recorded decision about a route that no longer
+	// exists, which reads as coverage and is not.
+	const livePaths = new Set(handlerBlocks(routerText).map((b) => `${b.method} ${b.path}`));
+	for (const endpoint of exempt.keys()) {
+		if (!livePaths.has(endpoint))
+			problems.push(
+				`unsealed_exempt ${endpoint} names no route in workers/**; drop the exemption or restore the route`
+			);
 	}
 }
 

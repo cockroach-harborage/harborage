@@ -22,3 +22,13 @@ app.post('/api/things/keyring', async (c) => {
 app.post('/api/things/ping', async (c) => {
 	return c.json({ ok: true }, 202);
 });
+
+// FAIL fixture: a route under the sensitive prefix that is in neither
+// "endpoints" nor "unsealed_exempt". Before the prefix rule existed, this was
+// invisible: the gate only ever checked the entries it already had, so adding a
+// plaintext intake beside the sealed ones raised nothing.
+app.post('/api/things/leak', async (c) => {
+	const body = await c.req.json();
+	await c.env.DB.prepare('INSERT INTO things (note) VALUES (?1)').bind(body.note).run();
+	return c.json({ ok: true }, 202);
+});
