@@ -75,6 +75,19 @@ export interface ApiEnv extends FlagBindings {
 	 * send affordance; the Worker refuses the write either way.
 	 */
 	TURNSTILE_SITEKEY?: string;
+	/**
+	 * Shared with the operated onion origin, which proves it forwarded a request
+	 * by attaching an HMAC over the method, path, body digest and a timestamp.
+	 *
+	 * Deliberately named without an unseal-shaped suffix: it opens no
+	 * ciphertext, so registering it in tools/gates/sensitive-endpoints.json as a
+	 * platform_key would be a false custody claim. Named plainly here so the
+	 * choice is not read as evasion of the unseal-shaped-binding rule.
+	 *
+	 * ABSENT TODAY, and while it is absent every onion-only route refuses for
+	 * everyone on every network. That is the correct resting state.
+	 */
+	ONION_INGRESS_MAC_KEY?: string;
 }
 
 /** workers/media — M1 */
