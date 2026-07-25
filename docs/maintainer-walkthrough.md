@@ -17,10 +17,15 @@ gated; only switching a feature ON is.
 
 ### 1.1 Register your commit-signing key, then require signatures
 
-**Why:** every commit is already signed locally, but the key is not registered
-on GitHub, so all 55 commits show "unverified" and `required_signatures` is off
-while CLAUDE.md lists signed commits as binding. This is a real security
-property a solo maintainer *can* have, unlike the ≥2-reviewer rule.
+**Why:** of the 59 commits on `main`, **36 carry a signature but show
+"unverified"** because the key was never registered on GitHub, and 23 (the early
+direct-to-main work) are unsigned. `required_signatures` is off while CLAUDE.md
+lists signed commits as binding. This is a real security property a solo
+maintainer *can* have, unlike the ≥2-reviewer rule.
+
+GitHub verifies at display time, so registering the key turns those 36 green
+retroactively. The 23 unsigned ones stay unsigned — that is history, not
+something to rewrite.
 
 ```bash
 # 1. Grant the CLI the scope it needs (opens a browser, one time).
@@ -36,7 +41,15 @@ ENFORCE_SIGNATURES=1 bash scripts/github-setup.sh
 
 **Verify:** open any recent commit on GitHub. It should show a green
 **Verified** badge. If it still says Unverified, the key you registered is not
-the one `git config user.signingkey` points at.
+the one `git config user.signingkey` points at — check with:
+
+```bash
+git config user.signingkey     # should match the .pub you registered
+```
+
+Note `required_signatures` rejects any push GitHub cannot verify, so enable it
+*after* the key is registered, which is the order above. The script skips it
+unless `ENFORCE_SIGNATURES=1` for exactly that reason.
 
 > The same script now also makes `zizmor`, `gitleaks` and `tofu-validate`
 > required checks. They already ran on every PR, but until now they could fail
