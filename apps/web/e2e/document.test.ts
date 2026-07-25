@@ -50,6 +50,10 @@ test('a photo redaction bakes a downscaled public copy (hide and continue)', asy
 	});
 	// The worker strips metadata, bakes solid boxes, downscales, and re-encodes.
 	await page.getByRole('button', { name: 'Yes, hide and continue' }).click();
+	// The human confirms the EXACT bytes that will ship (ARCHITECTURE §19:1216),
+	// not a display working copy that gets re-rendered afterwards.
+	await expect(page.getByRole('heading', { name: 'Check the covered copy' })).toBeVisible();
+	await page.getByRole('button', { name: 'Yes, this is safe to share' }).click();
 	await expect(page.getByText('Your covered photo is ready.')).toBeVisible();
 	await page.getByRole('button', { name: 'Tear gas / crowd-control weapons' }).click();
 	await page.getByRole('button', { name: 'Keep on phone' }).click();

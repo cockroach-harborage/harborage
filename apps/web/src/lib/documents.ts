@@ -38,10 +38,44 @@ export interface LocalDocument {
 	createdAt: number; // device clock; stays on device
 	/** True only after the user confirmed faces/IDs are hidden. False => vault-only. */
 	redactionConfirmed: boolean;
+	/**
+	 * Digest of the exact derivative bytes the human approved on the confirm
+	 * screen (ARCHITECTURE §19:1216).
+	 *
+	 * A regression guard, not a second source of truth. The pixels confirmed and
+	 * the pixels stored are one object by construction — there is no re-render
+	 * between the two — and this records which bytes those were so that if a
+	 * future refactor ever reintroduces a second render path, `save()` refuses
+	 * rather than shipping something nobody reviewed.
+	 */
+	confirmedDerivativeSha?: string;
 	/** Set once the record has been sent off device (only possible when document_intake is on). */
 	sent?: boolean;
 	derivative?: Derivative;
 	original?: SealedOriginal;
+}
+
+/**
+ * Crash-quarantine copy of a capture in flight (ARCHITECTURE §19:1212).
+ *
+ * A potato phone dying mid-redaction must not lose the evidence. Written
+ * ENCRYPTED — the same sealed ciphertext that will later become the vault
+ * artifact, so the original is sealed exactly once rather than twice on the
+ * weakest device we support. Cleared at commit, and on the next open, so a
+ * crashed capture is offered back once and does not linger.
+ *
+ * Honest limit, identical to the one above for `SealedOriginal`: the content key
+ * sits beside the ciphertext, so a seized unlocked phone can still read it. That
+ * is stated on /limits and is best-effort until the APK.
+ */
+export interface QuarantinedCapture {
+	id: string;
+	kind: DocumentKind;
+	mime: string;
+	sha256: string;
+	sealed: Blob;
+	key: Uint8Array;
+	createdAt: number;
 }
 
 // DELIBERATELY NOT RENAMED alongside "record" -> "report". These are on-device
@@ -52,6 +86,9 @@ export interface LocalDocument {
 // rename them later if there is ever a reason.
 const DB_NAME = 'harborage-records';
 const STORE = 'records';
+const QUARANTINE = 'capture-quarantine';
+/** v2 adds the crash-quarantine store. The upgrade is additive: nothing is dropped. */
+const DB_VERSION = 2;
 
 class LocalDocumentStore {
 	private db: Promise<IDBPDatabase> | null = null;
@@ -59,9 +96,14 @@ class LocalDocumentStore {
 	/** Lazy open: never touches indexedDB during SSR/prerender (browser only). */
 	private open(): Promise<IDBPDatabase> {
 		if (!this.db) {
-			this.db = openDB(DB_NAME, 1, {
-				upgrade(db) {
-					db.createObjectStore(STORE, { keyPath: 'id' });
+			this.db = openDB(DB_NAME, DB_VERSION, {
+				upgrade(db, oldVersion) {
+					// Guarded by oldVersion rather than unconditional creates: an
+					// existing phone holds the sealed pristine original of something
+					// that may exist nowhere else, and re-creating a store would
+					// destroy it.
+					if (oldVersion < 1) db.createObjectStore(STORE, { keyPath: 'id' });
+					if (oldVersion < 2) db.createObjectStore(QUARANTINE, { keyPath: 'id' });
 				}
 			});
 		}
@@ -85,9 +127,24 @@ class LocalDocumentStore {
 		await (await this.open()).delete(STORE, id);
 	}
 
-	/** Panic-wipe: destroy every on-device record. Irreversible. */
+	/** Hold a sealed capture while the human works on the cover boxes. */
+	async quarantine(entry: QuarantinedCapture): Promise<void> {
+		await (await this.open()).put(QUARANTINE, entry);
+	}
+
+	async quarantined(): Promise<QuarantinedCapture[]> {
+		const all = (await (await this.open()).getAll(QUARANTINE)) as QuarantinedCapture[];
+		return all.sort((a, b) => b.createdAt - a.createdAt);
+	}
+
+	async releaseQuarantine(id: string): Promise<void> {
+		await (await this.open()).delete(QUARANTINE, id);
+	}
+
+	/** Panic-wipe: destroy every on-device document AND every quarantined capture. */
 	async wipeAll(): Promise<void> {
-		await (await this.open()).clear(STORE);
+		const db = await this.open();
+		await Promise.all([db.clear(STORE), db.clear(QUARANTINE)]);
 	}
 }
 
