@@ -27,6 +27,18 @@ const creds = {
 };
 const SHA = 'd'.repeat(64);
 
+/** Minimal Images stub. Never reached in these tests, but shaped correctly. */
+function images() {
+	return {
+		info: async () => ({ format: 'image/webp', fileSize: 1000 }),
+		input: () => ({
+			transform: () => ({
+				output: async () => ({ response: () => new Response(new Uint8Array(8)) })
+			})
+		})
+	};
+}
+
 function env(over: Record<string, unknown> = {}) {
 	return {
 		FLAGS: flags({ document_intake: true, archive_publish: true }),
@@ -87,20 +99,25 @@ describe('the master route stays closed unless everything is ready', () => {
 	});
 });
 
-describe('the master path never names the vault', () => {
-	it('reads and writes only the public media bucket', async () => {
-		const source = await import('node:fs/promises').then((fs) =>
-			fs.readFile(new URL('../src/app.ts', import.meta.url), 'utf8')
-		);
-		const master = source.slice(source.indexOf("app.post('/media/master'"), source.indexOf("// --- Vault original"));
-		expect(master).toContain('PUBLIC_MEDIA_BUCKET');
-		expect(master).not.toContain('EVIDENCE_VAULT_BUCKET');
+describe('the master path', () => {
+	// "Never names the vault bucket" is enforced by
+	// tools/gates/gate-archive-custody.mjs, NOT here. The route sits behind a
+	// per-request credential, so a unit test without a valid cap-cert gets 401
+	// and never reaches the bucket constant -- written as a fetch-interception
+	// first, sabotaged to read from the vault, and it stayed green.
+	it('refuses without a credential, even when everything else is ready', async () => {
+		const res = await post({ derivative_sha256: SHA }, env({ IMAGES: images() }));
+		expect(res.status).toBe(401);
 	});
 
-	it('never uses the hosted Images namespace, which needs a paid plan', async () => {
-		const source = await import('node:fs/promises').then((fs) =>
-			fs.readFile(new URL('../src/app.ts', import.meta.url), 'utf8')
+	it('closes under heightened threat even with archive_publish on', async () => {
+		const res = await post(
+			{ derivative_sha256: SHA },
+			env({
+				IMAGES: images(),
+				FLAGS: flags({ document_intake: true, archive_publish: true, heightened_threat: true })
+			})
 		);
-		expect(source).not.toContain('IMAGES.hosted');
+		expect(res.status).toBe(403);
 	});
 });

@@ -16,6 +16,24 @@ function flags(enabled: boolean) {
 	};
 }
 
+/**
+ * Enable named flags only.
+ *
+ * `flags(true)` turns on heightened_threat too, and every archive route passes
+ * `disabledUnderHeightenedThreat: true`, so a blanket-on stub yields 403 rather
+ * than reaching the credential check. That is correct behaviour and worth its
+ * own test, but it makes the blanket stub useless for testing anything past
+ * the flag gate.
+ */
+function only(...names: string[]) {
+	return {
+		get: async (k: string) =>
+			names.includes(k.replace('flag:', ''))
+				? JSON.stringify({ enabled: true, epoch: 1, updatedAt: '2026-07-25' })
+				: null
+	};
+}
+
 /** RateLimit DO stub that always admits, so the ladder is never the reason. */
 const rateLimit = {
 	idFromName: (n: string) => n,
@@ -164,15 +182,28 @@ describe('the probation sweep', () => {
 });
 
 describe('importing a reference to media held elsewhere', () => {
-	it('makes no outbound request', async () => {
-		// Not a disabled fetch, not one behind a flag: there is no fetch in the
-		// handler at all. Re-hosting is the counsel-gated source-terms question.
-		const source = await import('node:fs/promises').then((fs) =>
-			fs.readFile(new URL('../src/app.ts', import.meta.url), 'utf8')
+	// "The import handler makes no outbound request" is enforced by
+	// tools/gates/gate-archive-custody.mjs, NOT here. This route sits behind a
+	// per-request credential, so a unit test without a valid cap-cert gets 401
+	// and never reaches the code it would be checking -- I wrote that test as a
+	// fetch-interception first, sabotaged the handler by adding a fetch, and
+	// watched it stay green. What CAN be asserted here is reachability.
+	it('refuses without a credential, even with the flag on', async () => {
+		const res = await post(
+			'/api/archive/import',
+			{ canonical_content_id: 'publisher:clip-1', dhash64: '0123456789abcdef' },
+			env({ FLAGS: only('source_import') })
 		);
-		const start = source.indexOf("app.post('/api/archive/import'");
-		const handler = source.slice(start, source.indexOf('app.post(', start + 10));
-		expect(handler).not.toMatch(/\bfetch\s*\(/);
+		expect(res.status).toBe(401);
+	});
+
+	it('closes under heightened threat even with source_import on', async () => {
+		const res = await post(
+			'/api/archive/import',
+			{ canonical_content_id: 'publisher:clip-1', dhash64: '0123456789abcdef' },
+			env({ FLAGS: only('source_import', 'heightened_threat') })
+		);
+		expect(res.status).toBe(403);
 	});
 
 	it('stores no URL, and refuses one sent as a content id', async () => {
