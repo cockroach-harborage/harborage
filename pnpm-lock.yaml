@@ -163,6 +163,12 @@ importers:
         specifier: ^6.0.0
         version: 6.2.4
     devDependencies:
+      '@noble/curves':
+        specifier: ^2.2.0
+        version: 2.2.0
+      '@scure/base':
+        specifier: ^2.2.0
+        version: 2.2.0
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(vite@8.1.5(esbuild@0.28.1))

@@ -12,6 +12,7 @@
 		"./hkdf-tree": "./src/hkdf-tree.ts",
 		"./minisign": "./src/minisign.ts",
 		"./mnemonic": "./src/mnemonic.ts",
+		"./quorum": "./src/quorum.ts",
 		"./notice": "./src/notice.ts",
 		"./pack": "./src/pack.ts",
 		"./sealed-box": "./src/sealed-box.ts",

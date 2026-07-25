@@ -173,7 +173,13 @@ export const SIG_CONTEXT = {
 	/** A brokered aid request card, sealed to a counterparty one-shot prekey. */
 	aidRequest: 'harborage/sig/aid-request/v1',
 	/** A responder's acceptance of an open need. */
-	aidAccept: 'harborage/sig/aid-accept/v1'
+	aidAccept: 'harborage/sig/aid-accept/v1',
+	/** A marshal attesting a SAFE_EXIT or DISPERSAL signal for one zone. */
+	marshalSignal: 'harborage/sig/marshal-signal/v1',
+	/** A reviewer signing off publication of an accountability record. */
+	namingRecord: 'harborage/sig/naming-record/v1',
+	/** The signed list of publishable zone ids for one epoch. */
+	zoneList: 'harborage/sig/zone-list/v1'
 } as const;
 
 export type SigContext = (typeof SIG_CONTEXT)[keyof typeof SIG_CONTEXT];
