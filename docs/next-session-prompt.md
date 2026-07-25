@@ -1,147 +1,442 @@
-Continue building Harborage (repo: `/Users/ameenahsan/projects/cockroach-app`) — Cloudflare-native civic infrastructure for peaceful, lawful protest and human-rights documentation in India. Read `CLAUDE.md`, `PRD.md`, `ARCHITECTURE.md` first (source of truth; ARCH §18 overrides earlier sections, §14/§18.3 authoritative on version pins). Read the auto-loaded memory (`harborage-project.md`, `harborage-m2-complete.md`) for current state and build gotchas.
+# Session prompt — finish M3, then M4, then M5
+
+Continue building Harborage (repo: `/Users/ameenahsan/projects/cockroach-app`) —
+Cloudflare-native civic infrastructure for peaceful, lawful protest and
+human-rights documentation in India. Read `CLAUDE.md`, `PRD.md`,
+`ARCHITECTURE.md` first (source of truth; **ARCH §18 overrides earlier
+sections**, §14/§18.3 authoritative on version pins, and for the client media
+pipeline **§19 overrides §7.5 overrides §7.1**). Read the auto-loaded memory
+(`harborage-project.md`, `harborage-m2-complete.md`, `harborage-m3-evidence.md`)
+for current state and build gotchas.
 
 ## GOAL THIS SESSION
 
-Build **M3 (Evidence)**, then **M4 (Brokered aid)**, then **M5 (Realtime + accountability)** — as much as possible, all behind fail-closed flags. Do the heavy lifting. I am a solo maintainer and will not review every line: take ownership, make the routine calls yourself, and stop only for things that genuinely need me (a red line, legal exposure, product naming, anything that changes what a user is promised, or a manual step you cannot perform).
+**Finish M3 (Evidence), then build M4 (Brokered aid), then M5 (Realtime +
+accountability)** — as much as possible, all behind fail-closed flags. Do the
+heavy lifting. I am a solo maintainer and will not review every line: take
+ownership, make the routine calls yourself, and stop only for things that
+genuinely need me (a red line, legal exposure, product naming, anything that
+changes what a user is promised, or a manual step you cannot perform).
 
-You have Cloudflare MCP, `gh` for both accounts, and permission to approve production deploys. Don't wait for me on anything you can do yourself.
+You have Cloudflare MCP, `gh` for both accounts, and permission to approve
+production deploys. Don't wait for me on anything you can do yourself.
 
-## CURRENT STATE (verified 2026-07-25, end of session 8)
+## CURRENT STATE (verified 2026-07-25, end of session 9)
 
-`main` = `43930cc`, working tree clean, **deployed and live** at `cockroachharborage.org`.
+`main` = `6031865`, working tree clean, **deployed and live** at
+`cockroachharborage.org`.
 
-**M0 + M1 + M2 are all complete.** Baseline:
-- **13 CI gates**, **326 unit tests**, **37 e2e** — all green
-- Production D1: **12 migrations, zero rows in every table**
+**M0 + M1 + M2 complete. M3 is roughly half done** (PRs #50–#54, all merged and
+deployed). Baseline:
+
+- **13 CI gates**, **387 unit tests**, **48 e2e** — all green
+- Production D1: **13 migrations, zero rows in every table**
 - **Every feature flag OFF**
 
-Packages: `apps/{web,console}`, `workers/{api,media,consumer}`, `packages/{crypto,worker-lib,outbox,foundry}`, `infra/` (25 tofu resources), `tools/gates` (13), `tools/plan-guard`.
+Packages: `apps/{web,console}`, `workers/{api,media,consumer}`,
+`packages/{crypto,worker-lib,outbox,foundry}`, `infra/` (26 tofu resources),
+`tools/gates` (13), `tools/plan-guard`.
 
-Tests by package: crypto 95, worker-lib 86, web 40, consumer 23, media 21, api 20, console 17, outbox 24.
+Tests by package: crypto 109, worker-lib 86, web 68, media 30, consumer 28,
+api 24, outbox 25, console 17.
 
-**DO classes that exist:** `FlagState`, `NoticeLog` (console); `RateLimit`, `VerificationState`, `SpendCap`, `ReReviewQueue` (api). api wrangler migration tags go up to **v3** — the next one is **v4**.
+**DO classes:** `FlagState`, `NoticeLog` (console, tags up to **v2**);
+`RateLimit`, `VerificationState`, `SpendCap`, `ReReviewQueue` (api, tags up to
+**v3** — next is **v4**).
 
-**Flags:** `heightened_threat`, `notices_publish`, `directory_intake`, `document_intake`, `incidents_publish`, `ai_moderation`, `community_corroborate`, `archive_anchoring`. All OFF. Adding one means editing **both** `packages/worker-lib/src/flags.ts` (the `FlagName` union) and `apps/console/src/flag-policy.ts` (`FLIPPABLE`).
+**Flags** (`packages/worker-lib/src/flags.ts` + `apps/console/src/flag-policy.ts`
+— you must edit **both**): `heightened_threat`, `notices_publish`,
+`directory_intake`, `document_intake`, `evidence_vault`, `incidents_publish`,
+`ai_moderation`, `community_corroborate`, `archive_anchoring`.
 
-**Crypto subpath exports:** `. ./canary ./cap-cert ./compartments ./device-keys ./hkdf-tree ./minisign ./mnemonic ./notice ./pack ./sealed-box ./signature ./sodium`
-**worker-lib exports:** `. ./types ./safe-log ./flags ./access ./envelope ./turnstile ./cap-cert ./ratelimit ./verification ./reputation`
+**Crypto subpath exports:** `. ./canary ./cap-cert ./compartments ./device-keys
+./hkdf-tree ./minisign ./mnemonic ./notice ./pack ./sealed-box ./shamir
+./signature ./sodium ./vault-key`
+**worker-lib exports:** `. ./types ./safe-log ./flags ./access ./envelope
+./turnstile ./cap-cert ./ratelimit ./verification ./reputation`
 
-**Migrations end at `0012_review_approvals.sql`.** Next is `0013`.
+**Migrations end at `0013_evidence_keyrings.sql`.** Next is `0014`.
 
-### What M2 built that you will build on
+**Routes today.** api: `POST /api/incidents/register`,
+`POST /api/evidence/keyring`, `POST /api/directory/report`,
+`GET /api/incidents/index`, `GET /api/notices`, `GET /api/directory/pack`,
+`GET /api/intake/status`. media: `/media/{create,part,complete,abort,head,derivative}`,
+**all six now behind cap-cert + PoP**.
 
-- **On-device identity** (`apps/web/src/lib/identity.ts` + `identity-core.ts`): BIP39 → non-extractable WebCrypto HKDF root → per-compartment Ed25519/X25519, 4th IndexedDB `harborage-identity`, three-tier custody ladder, real `/settings/identity`.
-- **Cap-cert + per-request PoP** (`packages/crypto/src/cap-cert.ts`, `packages/worker-lib/src/cap-cert.ts`): self-issued, authorises nothing, wired at `POST /api/incidents/register` and `/api/directory/report`.
-- **Rate ladder** (`packages/worker-lib/src/ratelimit.ts`): 16 global shards + per-ASN in parallel, then per-cap-cert which also holds the PoP nonces.
-- **Sealed-box** (`packages/crypto/src/sealed-box.ts`): ephemeral X25519 → HKDF → XChaCha20. Currently used SEALED-TO-PLATFORM for the register body.
-- **`openChunks`** (`packages/outbox/src/chunked-cipher.ts`): the inverse of `sealChunks`, deriving `total` from ciphertext length. **M3's vault restore depends on this.**
-- **§15 state machine** (`packages/worker-lib/src/verification/machine.ts`): pure, no imports. 8 states, canonical reach table, closed 5-verb action enum, `reachMachineryEnabled: false` pins the ceiling at `AI-Screened`.
-- **Reputation inputs** (`packages/worker-lib/src/reputation.ts`): √-damping, `clusterCap`, `r_gate`, decay, `dedupToken`. Nothing multiplies into reach yet — **that is M3's job.**
-- **Consumer** (`workers/consumer`): explicit ack/retry, DLQ, Tier-0 from `RULESETS` KV, first writer of `incidents`.
-- **Console review queue**: two distinct Access subjects for `Human-Verified`.
+**Sealed-endpoint registry** (`tools/gates/sensitive-endpoints.json`):
+`POST /api/incidents/register` = SEALED-TO-PLATFORM on lane
+`incident-metadata-envelope`; `POST /api/evidence/keyring` = SEALED-E2E on lane
+`evidence-content-key`.
+
+### What session 9 built that you build on
+
+- **`gate-sealed-body` is lane-scoped** (#50). Every entry names a required
+  `sealed_object`. A `platform_key` opens only its own entry's lane. A
+  SEALED-E2E entry fails if a registered key opens ITS lane, **or** if any
+  unseal-shaped binding is unregistered anywhere. That second rule is what stops
+  the scoping being an escape hatch — do not weaken it.
+- **The §19 client pipeline** (#51). `apps/web/src/lib/pipeline/`:
+  `image-header.ts` (intrinsic dimensions with no decode), `derivative-core.ts`
+  (pure sizing/geometry/coverage arithmetic), `pipeline.worker.ts` (one render,
+  confirm-on-final-bytes), `ConfirmDerivative.svelte`. `documents.ts` is at IDB
+  **v2** with a `capture-quarantine` store.
+- **`packages/crypto/src/vault-key.ts`** (#52). Tier A and Tier B CEK custody.
+  `PINNED_CUSTODIAN_KEYS` is **empty**, so every wrap refuses.
+  `POST /api/evidence/keyring` is the SEALED-E2E lane; the consumer stores the
+  blob verbatim via `recordKeyring` and cannot open it.
+- **Media credentials + four upload bugs fixed** (#53). `OriginalStatus` gained
+  `none`. `MultipartCursor.bucket` is now the real bucket name.
+- **Turnstile, live** (#54). `infra/turnstile.tf`, sitekey served from
+  `GET /api/intake/status`, secret piped into `wrangler secret put` by the deploy
+  job. `TurnstileWidget.svelte` uses a **named `turnstile-script` Trusted Types
+  policy** that ignores its argument and returns one hardcoded constant.
 
 ## SEQUENCING (settled — do not re-litigate)
 
-**M3 → M4 → M5.** Build-first per ARCH §18.2: the build is never gated, only the switch-on is. Every human/legal gate (offshore custodians, counsel sign-off, APK, redaction-review humans, m-of-n reviewers) is deferred until after the full feature build, because I am solo until then. `docs/maintainer-walkthrough.md` holds my manual steps; none block you.
+**Finish M3 → M4 → M5.** Build-first per ARCH §18.2: the build is never gated,
+only the switch-on is. Every human/legal gate (offshore custodians, counsel
+sign-off, APK, redaction-review humans, m-of-n reviewers) is deferred until
+after the full feature build, because I am solo until then.
+`docs/maintainer-walkthrough.md` holds my manual steps; none block you.
 
-Carry this without engineering around it: **M3 is where the largest share of built-but-unflippable code accumulates.** ARCH §12 gates the evidence tier on off-platform custodians and an APK for the highest-risk capture tier. Build it, wire it, test it, ship it OFF. Do not lower a bar to make something demonstrable.
+Carry this without engineering around it: **M3 is where the largest share of
+built-but-unflippable code accumulates.** Build it, wire it, test it, ship it
+OFF. Do not lower a bar to make something demonstrable.
 
-## M3 — Evidence
+## M3 — what is left
 
-Read ARCH **§7.1–7.6** (capture→redact→vault, custody ledger, source import, client pipeline), **§16** (archive), **§19** (low-bandwidth upload), and **§5.4** (vault key custody).
+Suggested order; resequence if you find a better one, and say why.
 
-Suggested slice order — resequence if you find a better one, and say why:
+### 1. The outbox runner — the engine exists and nothing drives it
 
-1. **Redaction, properly.** `apps/web` already has `RedactionCanvas.svelte` and the capture Web Worker. Make redaction **irreversible solid-fill** with mandatory human before/after confirm, **failing closed to vault-only** on any uncertainty. The word "blur" is banned everywhere (§18.1) — it is "cover". §18.5-P2 asks for a **pixel-level test that the public derivative never contains the vault original's bytes**; that is the central integrity invariant of this milestone and belongs in a gate or an e2e, not a comment.
+`packages/outbox` has `nextEarliestRetry`, `maxAge`, `attempts`,
+`fullJitterDelay()` and `concurrencyFor()` all written and **never consumed**. A
+killed upload persists and is never picked back up, and every upload runs
+serially regardless of link. Build `apps/web/src/lib/outbox-runner.ts`:
 
-2. **E2E vault + the first `SEALED-E2E` endpoint.** Random 256-bit CEK per file → XChaCha20 chunked (already built) → R2. **Tier A**: CEK sealed to reporter vault key + one off-platform custodian. **Tier B**: Shamir 2-of-3 (`packages/crypto/src/shamir.ts` exists) with a **mandatory offshore share in every quorum**. The platform holds **zero shares and exposes no unwrap endpoint** — that is what makes "we cannot produce plaintext" literally true. Never add an org-wrapped copy of a content key.
+- flush on the `online` event and on `visibilitychange → visible` (**the only
+  reliable trigger on iOS PWAs**, §19:1304), plus a manual "try now"
+- exponential backoff with full jitter; honour `nextEarliestRetry` and `maxAge`
+- concurrency by link class (serial on 2G — parallel parts there cause
+  congestion collapse)
+- cancel (best-effort `AbortMultipartUpload`, delete the row, wipe the blob)
+- `navigator.storage.persist()` + quota check at enqueue, with the plain warning
+  from §19:1262 that a not-yet-vaulted original exists only on this phone
+- honest per-item progress copy (§19:1300), and `original_status` surfaced
 
-   **READ THIS BEFORE YOU START — a landmine I set deliberately in M2.** `gate-sealed-body` currently fails if *any* unseal-shaped binding exists anywhere once a `SEALED-E2E` endpoint is registered. `INTAKE_PRIVATE_KEY` **does** exist (consumer, for the metadata envelope). So registering M3's first E2E endpoint **will fail the gate**. That is intentional friction, not an accident: the fix is to refine the gate so the E2E check is scoped to the **data class of that endpoint**, with the registered `platform_key` entries for TO-PLATFORM endpoints explicitly acknowledged rather than globally forbidden. Do **not** fix it by deleting the check or renaming the binding — the whole point of the M2 change was to stop exactly that.
+**Prove resume across a restart and a link-class change** in a real browser, and
+prove a forced 429 on complete does **not** restart the multipart (#53 fixed
+that mapping; add the regression test).
 
-3. **Multipart resumable presign, finished.** `packages/outbox` has the 5 MiB engine (ETag-before-advance, re-mint on 403, idempotent complete). `workers/media` has aws4fetch presign. Wire the real end-to-end path and prove a resume across restart and network change.
+### 2. Panic-wipe (§19:1302)
 
-4. **`CustodyChain` DO + custody ledger + §63 BSA export.** Already classified `SQLITE_OK` in `gate-memory-only`, so no gate edit — but it must live at `workers/api/src/do/CustodyChain.ts` and needs api wrangler tag **v4**. Honesty is load-bearing here: "preservation supporting lawful processes, **not admissibility**". No court-admissibility guarantee, ever.
+`documents.wipeAll()` still has **no caller**. `identity.wipe()` is deliberately
+identity-only — read the comment before you touch it; one button that silently
+destroys everything is how people lose evidence they meant to keep. So this is a
+**missing separate affordance**, not a bug in the existing one. Add it on
+`/settings/safe-mode`: clears documents, quarantine, outbox rows, cipher blobs,
+SW caches and IndexedDB, with copy that states plainly that a not-yet-vaulted
+original is destroyed. EN + HI.
 
-5. **The corroboration-reach machinery** (§15, §18.1 puts it at M3). This is where `reachMachineryEnabled` becomes flippable: √-damped reputation into reach, `clusterCap`, `K_src`, **`CoordinationWindow` DO** (already in `gate-memory-only`'s `WHOLLY_MEMORY` list — memory-only, alarm-purged, **no persisted co-witness or social graph, ever**), cohort-pivot detection, diversity-of-corroboration-history weighting. `packages/worker-lib/src/reputation.ts` has the primitives; nothing is wired to reach yet.
+### 3. `CustodyChain` DO + §63 BSA export
 
-6. **Archive tables + dedup.** `perceptual_hashes` (BK-tree / banded LSH, **NOT** Vectorize — it does cosine/euclidean/dot only), `archive_items`, `archive_provenance`, `archive_disputes`. Exact-byte dedup collapses storage; perceptual matching is **reversible presentation-clustering that never deletes an object**. The dedup/pHash index covers **public derivatives only** — vault-original fingerprints never enter plaintext D1. Keep `original_sha256` always; keep ONE pristine original per exact-byte-unique admitted item and never discard it.
+`workers/api/src/do/CustodyChain.ts`, api wrangler tag **v4**. Already
+classified `SQLITE_OK` in `gate-memory-only`, so no gate edit.
 
-7. **Source-media import**: fingerprint-and-reference on off-platform egress. Counsel-gated (#14 ToS).
+- fixed 8-event vocabulary: `ingest, redact, admit, probation-clear, lock,
+  replicate, dispute, tombstone`
+- `record_hash = SHA256(prev_hash ‖ canonicalJson(record))` — reuse
+  `canonicalJson` from `@harborage/crypto/pack`
+- Merkle checkpoints every 64 entries or daily; **cohort-≥K or randomized delay
+  before inclusion** (§16:970) so a singleton submitter gets no timing oracle
+- no deanonymizing fields: no IP, no device, no real name, actor = pseudonymous
+  role/band only
+- **export gated on `original_status = 'vaulted'`** (§19:1261). A hash
+  registered without vaulted bytes is explicitly the weaker claim and the export
+  must say so.
+- "preservation supporting lawful processes, **not** an admissibility
+  guarantee", in the artifact and on `/limits`
+- `/archive/verify`: a static client-side inclusion-proof verifier (hash →
+  custody record → Merkle path → anchor) that trusts nothing of ours
+- `archive_anchoring` stays OFF; OTS anchoring is a stub — §18.4 records that
+  both candidate JS libraries are unmaintained and the choice is re-taken here
 
-**M3 admission rule is fail-closed** (§16): the permanent public archive admits ONLY media that is verified AND human-confirmed face/plate/PII-redacted (including contextual re-identification review) AND non-radioactive AND optimized. Anything else is sealed-vault-only or short-purged. **Durable ≠ immutable**: no Bucket Lock and no off-Cloudflare replication before a re-scanned probation window clears; a multi-party logged **purge-override supersedes every lock and replica** for illegal content or a lawful erasure order. The §7.3 preservation flip is counsel-gated — ship the reversible parts (dedup, transcode, model, display) and keep locks/replication/IPFS behind a flag.
+### 4. Archive tables, dedup, fail-closed admission
 
-## M4 — Brokered aid (outline; plan properly on arrival)
+Migrations **0014–0017** + inverses: `perceptual_hashes`, `archive_items`,
+`archive_provenance`, `archive_disputes`.
 
-Read ARCH §5.3, §9.2, §9.3. Medical / mutual aid / assistance on **sealed-box one-shot** (`crypto_box_seal` — libsodium is fine here, it sits behind the vault, not on first paint; `packages/crypto/src/sodium.ts` is the lazy loader). `Broker`/`Mailbox` memory-only routing + R2 ciphertext, late reveal, anti-honeypot, **jittered alarm-tick delivery**. Medical and detention are **onion-only and must refuse over clearnet**. `skills_registry` is brokered, **never browsable**. First real use of `requestSeed` per-request identities (already in `hkdf-tree.ts` and `device-keys.ts`, unused so far). Prekey fetches are never persisted. `Broker`/`Mailbox` are already in `gate-memory-only`'s `WHOLLY_MEMORY` list.
+- **64-bit dHash over the derivative only**, computed client-side (Workers
+  cannot decode pixels, §14:615; `env.IMAGES.info()` returns no pixels). It is
+  attacker-controlled, so it is advisory/presentation-only and recomputable
+  server-side later — say so.
+- **Banded LSH** as four indexed 16-bit band columns for candidate lookup, then
+  exact Hamming in the Worker. **Never Vectorize** (§14:680 — cosine/euclidean/
+  dot only, no Hamming). Vectorize does not exist in `infra/` and M3 does not
+  need it.
+- **Perceptual matching never deletes an object.** Exact-byte dedup collapses
+  storage; perceptual dedup collapses *presentation*. Two different-angle videos
+  of one event are distinct evidence.
+- Vault-original fingerprints **never** enter plaintext D1 (§16:1037) — that
+  would be a content-existence oracle over unreadable content.
+- Cohort-gated `derivative_held: skip|upload` on register. **Never** a HEAD on
+  the sealed original's hash; convergent encryption is explicitly rejected.
+- Probation window state machine (30–90 d, counsel-set) with continuous
+  re-scan. New `archive_publish` flag, OFF.
+- `HRB-<base32(sha256(original)[:10])>` citable id.
+- Append-only disputes; Debunked withdraws **local** display and keeps the
+  tamper-evident record that it existed and was retracted.
+- **Do not build Bucket Lock application.** §16 makes it counsel-gated and
+  post-probation; a lock applied before certainty turns any detection miss into
+  permanently un-purgeable illegal content. The purge-override maps to the
+  existing LOCKED `permanent_delete`.
 
-## M5 — Realtime + accountability (outline; plan properly on arrival)
+### 5. The corroboration-reach machinery (§15, §18.1 puts it at M3)
 
-Read ARCH §6, §8. `LiveBoard` (sharded HLL, memory-only, already classified), zone-level never finer than geohash-6, delayed (base + jitter), **density-floored with suppress-until-safe-density**, coarse crowd **bands never counts**, short-TTL, **memory-only — never DO SQLite or D1**. `DeadlineTimer` (SQLite, content-free payloads). Accountability records + `ReviewGate` DO (console-hosted) + detainee tracker. **Every irreversible gate ships OFF behind an unsatisfiable quorum.** The facilities layer is precise but **physically segregated** so it can never be joined to protestor density.
+`workers/api/src/do/CoordinationWindow.ts` — api tag **v5**. Already in
+`gate-memory-only`'s `WHOLLY_MEMORY` list.
+
+- behaviour-only clusters (ASN bucket, timing burst, device class,
+  stylometry-lite, template similarity), scoped to the item's window and
+  **discarded on alarm**
+- `packages/worker-lib/src/verification/independence.ts`: `K_src`, `clusterCap`,
+  **diversity-of-corroboration-history weighting** (accounts that have never
+  before co-appeared count more than raw earned scalar), **cohort-pivot
+  detection** (a long unrelated history suddenly co-corroborating one hot item
+  is itself a coordination signal, even with no burst)
+- `reachMachineryEnabled` becomes driven by `community_corroborate`
+- conformance tests §18.5-P2: the reach table, "a flag storm cannot bury truth",
+  "a mob cannot verify a falsehood cheaply", a Sybil/CIB simulation, and the
+  guard that no code path reaches an irreversible verb
+
+**You will be tempted to persist cluster state so it survives an eviction.
+Don't.** No co-witness or social graph is ever persisted (§15:819), and
+`gate-memory-only` will stop you. The correct answer is to accept the eviction,
+not to edit the gate.
+
+### 6. Server-side AVIF master + source-media import
+
+- `env.IMAGES` on `workers/media`, reading the derivative and writing the AVIF
+  master back **over the presign path media already has** — so no R2 binding and
+  **no `HB_DEPLOY_TOKEN` scope change**. 20 MB input ceiling; oversized → skip,
+  not fail. Behind `archive_publish`, so zero transformations are billed until
+  switch-on. **Tell me one PR ahead**: a new binding can fail deploy with
+  Cloudflare error 10000, same class of risk as Workers AI.
+- `source_import` flag + **fingerprint-and-reference only**: store the
+  user-supplied canonical content ID and the client pHash. **No fetch** — the
+  off-platform Tor egress box does not exist, and re-hosting is the
+  counsel-gated (#14 ToS) step.
+
+### 7. Video poster keyframe (§7.5:334–338, §19:1310–1315)
+
+The app accepts images only today. Video needing redaction **fails closed to
+SEALED_ONLY**; the only day-1 public artifact is a **redacted poster keyframe**
+run through the existing still pipeline. Poster generation is fallible
+(iPhone HEVC and some high-bitrate H.264 will not decode in Android WebView) —
+probe the decode and **fail closed with explicit copy**, never a silent missing
+poster. The copy must say plainly that the video's faces are **not** covered and
+it stays sealed. Do not imply a server-produced face-covered video will ever
+arrive; §7.5 is explicit that it will not.
+
+## M4 — Brokered aid (plan properly on arrival)
+
+Read ARCH §5.3, §9.2, §9.3. Medical / mutual aid / assistance on **sealed-box
+one-shot** (`crypto_box_seal`; libsodium is fine here, it sits behind the vault,
+not on first paint — `packages/crypto/src/sodium.ts` is the lazy loader).
+`Broker`/`Mailbox` memory-only routing + R2 ciphertext, late reveal,
+anti-honeypot, **jittered alarm-tick delivery**. Medical and detention are
+**onion-only and must refuse over clearnet**. `skills_registry` is brokered,
+**never browsable**. First real use of `requestSeed` per-request identities
+(already in `hkdf-tree.ts` and `device-keys.ts`, still unused). Prekey fetches
+are never persisted. Widen `ACTIVE_COMPARTMENTS` to add `medical`/`aid`.
+`Broker`/`Mailbox` are already in `gate-memory-only`'s `WHOLLY_MEMORY` list.
+
+## M5 — Realtime + accountability (plan properly on arrival)
+
+Read ARCH §6, §8. `LiveBoard` (sharded HLL, memory-only, already classified),
+zone-level **never finer than geohash-6**, delayed (base + jitter),
+**density-floored with suppress-until-safe-density**, coarse crowd **bands never
+counts**, short-TTL, **memory-only — never DO SQLite or D1**. `DeadlineTimer`
+(SQLite, content-free payloads). Accountability records + `ReviewGate` DO
+(console-hosted) + detainee tracker. **Every irreversible gate ships OFF behind
+an unsatisfiable quorum.** The facilities layer is precise but **physically
+segregated** so it can never be joined to protestor density.
 
 ## DECISIONS ALREADY TAKEN (do not re-open)
 
-- **Compartment enum is closed, 8 entries, ordinals append-only** (they go on the wire): `document(0) directory(1) community(2) accountability(3) curation(4) medical(5) aid(6) legal(7)`. M4 activates `medical`/`aid`; M5 activates `accountability`. Widen `ACTIVE_COMPARTMENTS` in `packages/crypto/src/compartments.ts` when you do.
-- **Cap-cert is self-issued and authorises nothing.** Sybil resistance is Turnstile + rate ladder + reputation, never the cert.
-- **The intake key is operational, not ceremony, and explicitly NOT E2E.** The register body is `SEALED-TO-PLATFORM`. The evidence original is a different object with a different claim.
-- **Backup words are erased by default** after the user re-types 3 of 12; one opt-in setting (default OFF) keeps them; it cannot be re-enabled once erased.
-- **`reputation_scalars` lives at M2 with writes flag-gated** (zero rows until switch-on). ARCH §4.2 was corrected to match.
-- **The §15 machine lives in `packages/worker-lib/src/verification/`**, not in a worker, because api and consumer both need it and workers cannot import each other. It is deliberately **not** in the worker-lib barrel (`cap-cert.ts` also exports `DEFAULT_POLICY`).
-- **UI/route/flag vocabulary is "document"**, not "record" or "report" (PRD.md:830 — रिपोर्ट करना reads as filing an FIR).
+- **Compartment enum is closed, 8 entries, ordinals append-only** (they go on the
+  wire): `document(0) directory(1) community(2) accountability(3) curation(4)
+  medical(5) aid(6) legal(7)`.
+- **Cap-cert is self-issued and authorises nothing.** Sybil resistance is
+  Turnstile + rate ladder + reputation, never the cert.
+- **No media "upload ticket".** §7.6 sketches one; the cap-cert + PoP already in
+  the codebase does the job with no new shared secret and no new state. Recorded
+  in ARCH §7.6.
+- **Tier B vault custody is XOR-split, not plain Shamir.** §5.4's literal
+  "Shamir 2-of-3" cannot express "the offshore share is mandatory in every
+  quorum" — 2-of-3 over {reporter, lawyer, offshore} is satisfied by the two
+  domestic holders. Ships as `CEK = K_offshore XOR K_domestic`. §5.4 corrected.
+- **pHash is client-side, advisory only.** Workers cannot decode pixels.
+- **Turnstile is Managed mode, not Invisible**, and `feedback-enabled` is false.
+  An invisible widget fails Tor and VPN users silently with no recovery path.
+- **Backup words are erased by default** after the user re-types 3 of 12.
+- **UI/route/flag vocabulary is "document"**, not "record" or "report"
+  (PRD.md:830 — रिपोर्ट करना reads as filing an FIR).
 
 ## NON-NEGOTIABLE GUARDRAILS
 
-The three red lines (no public target list; no unverified plainclothes identity claims; no live or persistent individual location). The reversible/irreversible line: AI and community emit ONLY `{label, rank, hide-pending, retain-pending, route-to-gate}` — `gate-action-vocabulary` now fails the build if an irreversible verb appears anywhere in the trust-engine source. Autonomous ceiling `Community-Corroborated` with capped sub-amplification; `Human-Verified` is Layer-B only and needs two distinct Access subjects. Structural invariants: no member directory or enumeration endpoint, no social/vouch graph, no identity↔pseudonym map, no subscriber roster, no real-name/phone/SIM/OTP identity or recovery. Sensitive data sealed client-side; intake rejects non-sealed bodies; the platform holds no key and no unwrap endpoint for E2E classes. Coarse geo only. Redaction irreversible, fail-closed to vault-only. Retention honestly qualified against PITR/Time-Travel. `safeLog` only, no query logging. Every data-holding feature behind a fail-closed flag; heightened-threat tightens only. Memory-only DOs never touch DO storage OR D1.
+The three red lines (no public target list; no unverified plainclothes identity
+claims; no live or persistent individual location). The reversible/irreversible
+line: AI and community emit ONLY `{label, rank, hide-pending, retain-pending,
+route-to-gate}`. Autonomous ceiling `Community-Corroborated` with capped
+sub-amplification; `Human-Verified` is Layer-B only. Structural invariants: no
+member directory or enumeration endpoint, no social/vouch graph, no
+identity↔pseudonym map, no subscriber roster, no real-name/phone/SIM/OTP
+identity or recovery. Sensitive data sealed client-side; intake rejects
+non-sealed bodies; the platform holds no key and no unwrap endpoint for E2E
+classes. Coarse geo only. Redaction irreversible, fail-closed to vault-only.
+Retention honestly qualified against PITR/Time-Travel. `safeLog` only, no query
+logging. Every data-holding feature behind a fail-closed flag; heightened-threat
+tightens only. Memory-only DOs never touch DO storage OR D1.
 
-**Honesty is a correctness property, not a tone preference.** If a guarantee holds only "in bulk / absent a targeted code-injection order", phrase it that way. If something is not verified, the UI says so. No court-admissibility promise.
+**Honesty is a correctness property, not a tone preference.**
 
 ## BUILD GOTCHAS (hard-won — these will bite again)
 
+**Test your safety tests by breaking the thing they guard.**
+Twice in session 9 a test of mine was green for the wrong reason, and both were
+found by deliberate sabotage, not by reading:
+
+- The cover-verification inset by **8% of the box**. Fine on a small box; on a
+  700px box it skips a 56px band *inside* the confirmed region. A 6px paint
+  offset changed nothing. Now a fixed 3px, and strided sampling always includes
+  the last index on each axis or the bottom and right edges go unchecked.
+- A Turnstile e2e passed because the **script was blocked**, not because the
+  error callback fired. Only visible because a sibling test proved the same stub
+  does load.
+
+Before trusting any new guard: break the invariant, watch it fail, restore.
+
 **Process**
-- Run the FULL `pnpm typecheck && pnpm build && pnpm gates && pnpm pack:verify && pnpm test` before every commit. A per-filter typecheck has missed a CI failure.
-- **RUN THE APP.** The worst bugs this project has had were invisible to types and unit tests. `pnpm --filter @harborage/web exec playwright test` for anything web-facing; `wrangler deploy --dry-run` before pushing binding changes. Kill orphaned `wrangler dev` first (`pkill -f "wrangler dev"`) — local e2e flake is almost always that, and `share-pack`/`document` are the usual victims under parallel load. CI retries twice.
-- **`gitleaks` scans every commit in the PR range, not the final tree.** A false positive you already fixed will still fail CI until you squash the branch history. Its `generic-api-key` rule fires on a comparison that merely LOOKS like an assignment of a long value to a key-ish identifier (a `keyish.field === SOME_CONST.member` expression will do it) — restructure the code rather than adding a suppression file, since a suppressions list is where a real finding eventually hides. Note this doc originally tripped the same rule by quoting the offending expression verbatim.
-- **`zizmor` collects `**/.github/workflows/*.yml`**, including fixtures. Keep deliberately-broken workflow fixtures outside that exact path.
-- **Branch before you build.** I once committed a whole slice to `main`; branch protection caught it, but recovering cost time.
+- Run the FULL `pnpm typecheck && pnpm build && pnpm gates && pnpm pack:verify
+  && pnpm test` before every commit. A per-filter typecheck has missed a CI
+  failure.
+- **RUN THE APP.** `pnpm --filter @harborage/web exec playwright test` for
+  anything web-facing; `wrangler deploy --dry-run` before pushing binding
+  changes. Kill orphaned `wrangler dev` first (`pkill -f "wrangler dev"`) —
+  local e2e flake is almost always that, and `share-pack` is the usual victim.
+  CI retries twice.
+- **The Bash tool's cwd persists between calls.** A stray `cd apps/web` silently
+  breaks every later relative path. Use absolute paths or `cd` back.
+- `gitleaks` scans every commit in the PR range, not the final tree, so a fixed
+  false positive still fails until the branch is squashed. Its `generic-api-key`
+  rule fires on an expression that merely *looks* like assigning a long value to
+  a key-ish identifier — restructure rather than adding a suppressions file.
+- `zizmor` collects `**/.github/workflows/*.yml` including fixtures.
+- **Branch before you build.**
 
 **Gates**
-- `gate-selftest` requires **every** `gate-*.mjs` to have `tools/gates/fixtures/<gate>/{pass,fail*}/`. Several `fail-<reason>/` trees are supported and you should use them — one shared fixture only proves whichever check fires first. **This harness has caught three real bugs, two of them in gates written minutes earlier. Trust it over your reading of your own regex.**
-- `gate-memory-only` keys off the DO file's **basename**, fails unclassified classes, and scans **inside comments**. `CoordinationWindow`, `Broker`, `Mailbox`, `LiveBoard` are already in `WHOLLY_MEMORY`; `CustodyChain`, `DeadlineTimer`, `ReviewGate`, `CurationCoordinator` already in `SQLITE_OK`. `VerificationState` is `FIELD_FORBIDDEN` and its regex bans `signal|location|lat|lng|latitude|longitude|timing|arrival|pubkey|public_key` **in comments too** — that is why its vocabulary says "observations" and "day bucket".
-- `gate-schema` and `gate-memory-only` grep **inside SQL comments**. `gate-d1-index` fails any Worker query filtering an unindexed column and **does not parse table-level `UNIQUE`** — use a standalone `CREATE UNIQUE INDEX`.
-- `gate-ai-tells` scans `content/` + `apps/*/messages/` in EN and HI. No em-dash, no `!` anywhere (JSON included), no banned words; Hindi uses `।`.
-- `gate-sig-context` bans raw curve `.sign()` outside `packages/crypto/src/`.
-- `gate-action-vocabulary` scans `packages/worker-lib/src/verification/` with **substring** matching (not `\b`, because `\bpublish\b` misses `publishItem()`).
-- `gate-sealed-body` needs ≥2 assertions + a 4xx + a live route per registered endpoint, and now requires every unseal-shaped binding to be registered with a justification. **See the M3 §2 landmine note above.**
+- `gate-selftest` requires every `gate-*.mjs` to have
+  `tools/gates/fixtures/<gate>/{pass,fail*}/`. Use several `fail-<reason>/`
+  trees — one shared fixture only proves whichever check fires first. **The
+  `pass/` fixture must exercise the feature too**: when the sealed-body gate was
+  relaxed, `pass/` had to gain a SEALED-E2E lane or the relaxed path was never
+  tested.
+- `gate-memory-only` keys off the DO file's **basename**, fails unclassified
+  classes, and scans **inside comments**. Its D1 matcher is `\b`-anchored on the
+  literal token `DB`, so a differently-named D1 binding would evade it.
+- `gate-schema` and `gate-memory-only` grep **inside SQL comments**.
+  `gate-d1-index` fails any Worker query filtering an unindexed column and
+  **does not parse table-level `UNIQUE`** — use a standalone
+  `CREATE UNIQUE INDEX`.
+- `gate-ai-tells` scans `content/` + `apps/*/messages/` in EN and HI. No
+  em-dash, no `!` anywhere, no "submit", no "feed", no "blur", no
+  "just/simply/easily". It does **not** scan `docs/`.
+- `gate-action-vocabulary` uses **substring** matching, so `delete`, `identify`
+  and `reveal` are banned inside `packages/worker-lib/src/verification/` even as
+  part of a longer word.
+- `gate-sealed-body` needs ≥2 assertions + a 4xx + a live route per endpoint,
+  every unseal-shaped binding registered, and every entry carrying a
+  `sealed_object`.
 
 **Crypto**
-- Importing the `@harborage/crypto` **barrel** into a Workers-typed package drags `seal.ts` → `globalThis.crypto` into tsc and fails. Use subpath exports. Same for `device-keys.ts` — anything needing both sides goes in `apps/web` (the only workspace with DOM types that depends on both packages).
-- **`@noble/curves` P-256 verify needs BOTH `prehash: false` AND `lowS: false`** to accept a WebCrypto ECDSA signature. noble's `prehash` defaults to `true` (it hashes for you); WebCrypto does not normalise S. At the defaults it fails ~50% of the time, only on the phones that need the fallback tier. **Any test touching ECDSA must loop** — a single assertion passes by coin flip. `packages/crypto/src/signature.ts` is the single place that knows this; keep it that way.
-- Every signature takes a mandatory `SigContext`. Add new contexts to `SIG_CONTEXT` in `compartments.ts` (unique, `harborage/sig/` prefix, `/vN` suffix, `as const`).
+- Importing the `@harborage/crypto` **barrel** into a Workers-typed package
+  drags `seal.ts` → `globalThis.crypto` into tsc and fails. Use subpath exports.
+- **`@noble/curves` P-256 verify needs BOTH `prehash: false` AND `lowS: false`.**
+  At the defaults it fails ~50% of the time. Any test touching ECDSA must loop.
+- Every signature takes a mandatory `SigContext` from `SIG_CONTEXT`.
 
 **Web**
-- CSP lives in `apps/web/svelte.config.js`, NOT `_headers` — Kit appends inline-bootstrap hashes to `script-src`, and a second policy without them blocks hydration on every prerendered page. `connect-src` must keep allowing `https://*.r2.cloudflarestorage.com`. Adding a Trusted Types policy name requires listing it in `trusted-types` or Kit refuses to build.
-- Trusted Types is enforced on all pages. `new Worker(new URL(...))` needs the same-origin default TT policy (see `pipeline-client.ts`), and Vite requires the literal form — moving the URL into a helper breaks bundling and the worker 404s.
-- Svelte 5 `$state` proxies are NOT structured-cloneable — snapshot before `postMessage`/`IndexedDB.put`. Naming a variable `state` **shadows the `$state` rune** in svelte-check.
-- `apps/web/vitest.config.ts` includes only `test/**`, with no `$lib` alias and no DOM — anything unit-tested there must import nothing (hence the `*-core.ts` split pattern). Playwright's `allInnerTexts()` does **not** auto-wait; assert a count first.
-- Every route is prerendered: IndexedDB must be lazily opened, never at module scope.
+- CSP lives in `apps/web/svelte.config.js` **and** `apps/web/_headers`, and the
+  two are enforced independently. `_headers` deliberately carries no
+  `script-src`/`default-src`. `connect-src` must keep
+  `https://*.r2.cloudflarestorage.com`; both now also allow
+  `https://challenges.cloudflare.com` in `script-src`/`frame-src` — **one exact
+  host, no wildcard**, and an e2e asserts it stays that way.
+- **`HTMLScriptElement.src` IS a TrustedScriptURL sink.** With
+  `require-trusted-types-for 'script'` enforced, a plain-string `.src` throws and
+  a third-party script silently never loads. The `default` policy in
+  `pipeline-client.ts` rejects cross-origin by design and cannot rescue it. The
+  pattern is a **named** policy that ignores its argument and returns one
+  hardcoded constant, allow-listed by name in `trusted-types`.
+- **CSP blocks `fetch()` on the page's own `blob:` URL.** Do not widen
+  `connect-src` for a test — read committed bytes from IndexedDB instead, which
+  is the stronger assertion anyway.
+- `new Worker(new URL(...))` needs the same-origin default TT policy and Vite
+  requires the literal form.
+- Svelte 5 `$state` proxies are NOT structured-cloneable — snapshot before
+  `postMessage`/`IndexedDB.put`. Naming a variable `state` shadows the rune.
+- `apps/web/vitest.config.ts` includes only `test/**`, with no `$lib` alias and
+  no DOM — anything unit-tested there must import nothing (the `*-core.ts` split
+  pattern).
+- **Message JSON files are in authoring order, not sorted.** Insert new keys in
+  place; a global sort produces a 500-line unreviewable diff.
+- Every route is prerendered: IndexedDB must be lazily opened.
 
 **Cloudflare / CI**
-- New DO class → new wrangler migration tag (**never edit a deployed tag**, api is at v3) + re-export from the worker entry + classify in `gate-memory-only`.
-- `deploy.yml` order is console → web → api → media → **consumer last**. A cross-script DO binding must deploy after the class owner.
-- **`HB_DEPLOY_TOKEN` already has Queues scope** (the consumer deployed fine). **Workers AI is still untested** — binding it may fail with Cloudflare error 10000. Do that in its own small PR and tell me one PR ahead.
-- Deploys are `plan → apply → deploy`, all three gated on `production`. **All three must stay gated**: every secret is environment-scoped and there are zero repo-level secrets, so an ungated job reads them as empty and tofu fails "No valid credential sources found". Approve gate 1 without ceremony (read-only plan); **read the plan before approving gate 2**. `tools/plan-guard/check-plan.mjs` fails on any destroy or replace; `HB_ALLOW_DESTROY` is the escape hatch and needs a RUNBOOK line.
+- New DO class → new wrangler migration tag (**never edit a deployed tag**) +
+  re-export from the worker entry + classify in `gate-memory-only`.
+- `deploy.yml` order is console → web → api → media → **consumer last**.
+- **The `~> 5.22` provider nulls server-defaulted optional attributes on
+  re-apply and the API rejects a null bool**, breaking every deploy after the
+  first. Every optional+computed attribute on a new resource needs
+  `ignore_changes`. This is why `cloudflare_ai_gateway`, `cloudflare_d1_database`
+  and `cloudflare_turnstile_widget` all carry it.
+- New infra resource ⇒ new `infra/outputs.tf` output ⇒ new `REPLACE_*` sed in
+  `deploy.yml`.
+- Deploys are `plan → apply → deploy`, all three gated on `production`. **All
+  three must stay gated** (every secret is environment-scoped; an ungated job
+  reads them as empty). Approve gate 1 without ceremony; **read the plan before
+  approving gate 2**. `tools/plan-guard` fails on any destroy or replace.
+- **`HB_TERRAFORM_TOKEN` now has Turnstile:Edit** (added 2026-07-25).
+  **Workers AI and the Images binding are still untested** — bind either in its
+  own small PR and tell me one PR ahead.
 - The shell is **zsh**: unquoted `$VAR` does NOT word-split.
-- **NO SEED DATA.** Migrations have zero INSERTs, production D1 stays at zero rows, demo data only via Playwright route interception.
+- **NO SEED DATA.** Migrations have zero INSERTs, production D1 stays at zero
+  rows, demo data only via Playwright route interception.
 
 ## WORKING STYLE
 
-Verify every Cloudflare limit / model / API shape and every library version against **live** sources (Cloudflare docs MCP, npm) — the training cutoff is stale and in-repo docs drift. When a doc and a live source disagree, the live source wins and you update the doc in the same commit.
+Verify every Cloudflare limit / model / API shape and every library version
+against **live** sources — the training cutoff is stale and in-repo docs drift.
+For a Terraform resource schema, `tofu providers schema -json` in a scratch
+directory is authoritative and faster than the registry docs. When a doc and a
+live source disagree, the live source wins and you update the doc in the same
+commit.
 
-Small, signed, type-prefixed commits, **no attribution trailer**. Branch off main → PR → CI green (`ci`, `e2e`, `zizmor`, `gitleaks`, `tofu-validate`) → rebase-merge for linear history. PR bodies explain **why**, including what you rejected and why. If you find a bug in existing code, fix it and say so.
+Small, signed, type-prefixed commits, **no attribution trailer**. Branch off
+main → PR → CI green (`ci`, `e2e`, `zizmor`, `gitleaks`, `tofu-validate`) →
+rebase-merge for linear history. PR bodies explain **why**, including what you
+rejected and why. If you find a bug in existing code, fix it and say so.
 
-**Prefer adding a CI gate over adding a comment. Negative-test every new gate** — a gate that cannot fail is worse than no gate, and this repo has now shipped three of those (all caught by `gate-selftest`, two of them within minutes of being written).
+**Prefer adding a CI gate over adding a comment. Negative-test every new gate.**
 
-After each merge, approve the production deploy, cancel superseded waiting runs, and tell me the run id.
+After each merge, approve the production deploy, cancel superseded waiting runs,
+and tell me the run id.
 
-If something is unsafe, creates a compellable record, crosses a red line, or needs counsel — stop and ask, and choose the safer, less-data default. Shipping the unsafe version is worse than shipping late.
+If something is unsafe, creates a compellable record, crosses a red line, or
+needs counsel — stop and ask, and choose the safer, less-data default. Shipping
+the unsafe version is worse than shipping late.
 
-**Start with M3 slice 1 (redaction), and read the M3 §2 gate landmine before you get to the vault.**
+**Start with the outbox runner, and read the panic-wipe note before you touch
+`identity.wipe()`.**
