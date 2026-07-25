@@ -12,6 +12,12 @@ export const FLIPPABLE = [
 	'notices_publish',
 	'directory_intake',
 	'document_intake',
+	// Sealed originals leaving the device for the vault. Separate from
+	// document_intake because the metadata register and the E2E original are
+	// different custody classes: one the platform can read, one it cannot.
+	// Switch-on additionally waits on a pinned off-platform custodian key, which
+	// packages/crypto/vault-key.ts refuses to wrap without.
+	'evidence_vault',
 	'incidents_publish',
 	'ai_moderation',
 	// Community corroboration + reputation WRITES. Off means the tables stay at

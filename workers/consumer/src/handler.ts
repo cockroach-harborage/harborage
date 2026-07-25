@@ -23,7 +23,8 @@
  * Nothing is ever ack'ed merely because it was inconvenient.
  */
 import { openSealedBox } from '@harborage/crypto/sealed-box';
-import { unframeEnvelope } from '@harborage/worker-lib/envelope';
+import { ALG_VAULT_KEYRING, unframeEnvelope } from '@harborage/worker-lib/envelope';
+import { decodeKeyring } from '@harborage/crypto/vault-key';
 import { safeLog } from '@harborage/worker-lib/safe-log';
 import type { Observations } from '@harborage/worker-lib/verification';
 import { compileRuleset, loadRuleset, screen, type CompiledRuleset } from './tier0.ts';
@@ -49,6 +50,8 @@ export interface HandlerDeps {
 	intakePrivateKey: string | undefined;
 	/** Persist an admitted incident. Throws to signal a retryable failure. */
 	recordIncident(input: RecordedIncident): Promise<void>;
+	/** Persist an opaque evidence keyring. Throws to signal a retryable failure. */
+	recordKeyring(input: RecordedKeyring): Promise<void>;
 	/** Hand the observations to the per-item state machine. */
 	applyVerification(itemId: string, observations: Observations): Promise<void>;
 	/** Injected so the handler stays free of a clock. */
@@ -65,6 +68,23 @@ export interface RecordedIncident {
 	originalSha256: string | null;
 	derivativeSha256: string | null;
 	redactionConfirmed: boolean;
+}
+
+/**
+ * An evidence keyring, as the platform is allowed to know it.
+ *
+ * `keyring` is opaque ciphertext. There is deliberately no field for anything
+ * inside it, and no code path here opens it: the consumer holds
+ * INTAKE_PRIVATE_KEY, which opens the incident metadata envelope and NOTHING
+ * else. gate-sealed-body records that scoping as a distinct sealed object, and
+ * this shape is what makes it true rather than merely claimed.
+ */
+export interface RecordedKeyring {
+	originalSha256: string;
+	tier: 'A' | 'B';
+	keyring: Uint8Array;
+	copyCount: number;
+	createdBucket: string;
 }
 
 export type Disposition = 'ack' | 'retry';
@@ -190,6 +210,47 @@ export async function handleRegister(
  * Handle a whole batch. Never returns without having explicitly disposed of
  * every message, including when a handler throws.
  */
+/**
+ * Handle one evidence-keyring message.
+ *
+ * NOTE WHAT IS ABSENT: no unseal, no openSealedBox, no key. The blob is parsed
+ * only far enough to learn its tier, its copy count and which file digest it
+ * belongs to -- all of which are in the cleartext header by design -- and is
+ * then stored verbatim. If this function could open a keyring, the SEALED-E2E
+ * claim on POST /api/evidence/keyring would be false.
+ */
+export async function handleKeyring(
+	body: RegisterBody,
+	deps: HandlerDeps
+): Promise<Outcome> {
+	const framed = asBytes(body.envelope);
+	if (!framed) return { disposition: 'retry', reason: 'keyring_missing' };
+
+	const unframed = unframeEnvelope(framed);
+	if (!unframed || unframed.algId !== ALG_VAULT_KEYRING)
+		return { disposition: 'retry', reason: 'keyring_malformed' };
+
+	const ring = decodeKeyring(unframed.sealed);
+	// Malformed goes to the DLQ rather than being acked away: a keyring is the
+	// only thing standing between a reporter and their own sealed evidence.
+	if (!ring) return { disposition: 'retry', reason: 'keyring_undecodable' };
+
+	try {
+		await deps.recordKeyring({
+			originalSha256: Array.from(ring.originalSha256, (b) => b.toString(16).padStart(2, '0')).join(
+				''
+			),
+			tier: ring.tier,
+			keyring: unframed.sealed,
+			copyCount: ring.copies.length,
+			createdBucket: dayBucket(deps.now())
+		});
+	} catch {
+		return { disposition: 'retry', reason: 'keyring_store_failed' };
+	}
+	return { disposition: 'ack', reason: 'keyring_stored' };
+}
+
 export async function handleBatch(
 	batch: QueueBatchLike<RegisterBody & { kind?: unknown }>,
 	deps: HandlerDeps
@@ -203,6 +264,8 @@ export async function handleBatch(
 			const kind = message.body?.kind;
 			if (kind === 'incident_register') {
 				outcome = await handleRegister(message.body, rules, deps);
+			} else if (kind === 'evidence_keyring') {
+				outcome = await handleKeyring(message.body, deps);
 			} else if (kind === 'directory_report') {
 				// route-to-gate only: a report never auto-hides anything. The console
 				// queue is the consumer of these, and it lands with slice 7.

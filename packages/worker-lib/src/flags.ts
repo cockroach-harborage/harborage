@@ -21,6 +21,7 @@ export type FlagName =
 	| 'notices_publish'
 	| 'directory_intake'
 	| 'document_intake'
+	| 'evidence_vault'
 	| 'incidents_publish'
 	| 'ai_moderation'
 	| 'community_corroborate'

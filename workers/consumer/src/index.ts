@@ -8,7 +8,7 @@
  *
  * First writer of the `incidents` table.
  */
-import { handleBatch, type RecordedIncident } from './handler.ts';
+import { handleBatch, type RecordedIncident, type RecordedKeyring } from './handler.ts';
 import { safeLog } from '@harborage/worker-lib/safe-log';
 import type { Observations } from '@harborage/worker-lib/verification';
 import type { ConsumerEnv } from '@harborage/worker-lib/types';
@@ -47,6 +47,31 @@ export default {
 						)
 						.run();
 				},
+
+					async recordKeyring(ring: RecordedKeyring): Promise<void> {
+						// The blob is stored verbatim and never opened. This Worker holds
+						// INTAKE_PRIVATE_KEY, which opens the incident metadata envelope
+						// and nothing else; no key here can open a keyring copy, which is
+						// what makes the SEALED-E2E claim on the evidence original true.
+						//
+						// DO NOTHING on conflict: a keyring is keyed on the pristine
+						// original's digest, and overwriting one would be a way to swap
+						// whose keys can open an existing file.
+						await env.DB.prepare(
+							`INSERT INTO evidence_keyrings
+								(original_sha256, tier, keyring, copy_count, created_bucket)
+							 VALUES (?1, ?2, ?3, ?4, ?5)
+							 ON CONFLICT(original_sha256) DO NOTHING`
+						)
+							.bind(
+								ring.originalSha256,
+								ring.tier,
+								ring.keyring,
+								ring.copyCount,
+								ring.createdBucket
+							)
+							.run();
+					},
 
 				async applyVerification(itemId: string, observations: Observations): Promise<void> {
 					const ns = env.VERIFICATION_STATE;

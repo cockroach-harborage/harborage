@@ -8,14 +8,18 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { frameEnvelope, ALG_SEALED_BOX_X25519 } from '@harborage/worker-lib/envelope';
-import { NONCE_LENGTH, sealTo, sealedBoxPublicKey } from '@harborage/crypto/sealed-box';
+import { NONCE_LENGTH, openSealedBox, sealTo, sealedBoxPublicKey } from '@harborage/crypto/sealed-box';
 import {
 	handleBatch,
+	handleKeyring,
 	handleRegister,
 	type HandlerDeps,
 	type Outcome,
+	type RecordedKeyring,
 	type RegisterBody
 } from '../src/handler.ts';
+import { ALG_VAULT_KEYRING } from '@harborage/worker-lib/envelope';
+import { decodeKeyring, encodeKeyring, wrapTierA, type HolderKey } from '@harborage/crypto/vault-key';
 import { compileRuleset } from '../src/tier0.ts';
 
 const INTAKE_SK = new Uint8Array(32).fill(11);
@@ -46,6 +50,7 @@ function deps(over: Partial<HandlerDeps> = {}): HandlerDeps {
 		rulesets: { get: async () => null },
 		intakePrivateKey: INTAKE_SK_HEX,
 		recordIncident: vi.fn(async () => {}),
+		recordKeyring: vi.fn(async () => {}),
 		applyVerification: vi.fn(async () => {}),
 		now: () => 1_760_000_000_000,
 		...over
@@ -240,5 +245,98 @@ describe('the batch loop disposes of every message explicitly', () => {
 			}
 		});
 		expect(outcomes[0]!.disposition).toBe('ack');
+	});
+});
+
+// --- Evidence keyrings: stored opaque, never opened --------------------------
+
+const REPORTER_SK = new Uint8Array(32).fill(7);
+const CUSTODIAN_SK = new Uint8Array(32).fill(13);
+const reporterKey: HolderKey = { holder: 'reporter', publicKey: sealedBoxPublicKey(REPORTER_SK) };
+const custodianKey: HolderKey = {
+	holder: 'custodian-offshore',
+	publicKey: sealedBoxPublicKey(CUSTODIAN_SK)
+};
+
+function keyringEnvelope(): Uint8Array {
+	const ring = wrapTierA(
+		new Uint8Array(32).fill(0x5a),
+		new Uint8Array(32).fill(0x11),
+		reporterKey,
+		(n) => {
+			const out = new Uint8Array(n);
+			crypto.getRandomValues(out);
+			return out;
+		},
+		[custodianKey]
+	);
+	return frameEnvelope(encodeKeyring(ring), ALG_VAULT_KEYRING);
+}
+
+describe('evidence keyrings', () => {
+	it('stores the blob verbatim, without opening it', async () => {
+		const seen: RecordedKeyring[] = [];
+		const recordKeyring = vi.fn(async (input: RecordedKeyring) => {
+			seen.push(input);
+		});
+		const framed = keyringEnvelope();
+		const outcome = await handleKeyring({ envelope: framed }, deps({ recordKeyring }));
+
+		expect(outcome).toEqual({ disposition: 'ack', reason: 'keyring_stored' });
+		expect(recordKeyring).toHaveBeenCalledTimes(1);
+		const stored = seen[0]!;
+		expect(stored.tier).toBe('A');
+		expect(stored.copyCount).toBe(2);
+		expect(stored.originalSha256).toBe('11'.repeat(32));
+		// Verbatim: the bytes stored are the bytes that arrived, minus the frame.
+		expect(stored.keyring).toEqual(framed.subarray(5));
+	});
+
+	/**
+	 * The custody claim, as a test. The consumer holds INTAKE_PRIVATE_KEY, and if
+	 * that key could open a keyring copy then POST /api/evidence/keyring would be
+	 * SEALED-E2E in name only. It cannot: the copies are sealed to holder keys
+	 * that exist nowhere on this platform.
+	 */
+	it('cannot open a keyring copy with the key this worker does hold', async () => {
+		const framed = keyringEnvelope();
+		const ring = decodeKeyring(framed.subarray(5))!;
+		for (const copy of ring.copies) {
+			expect(openSealedBox(INTAKE_SK, copy.sealed)).toBeNull();
+		}
+		// And the holders it was actually sealed to can open it, so the test is
+		// checking custody rather than a broken ciphertext.
+		expect(openSealedBox(REPORTER_SK, ring.copies[0]!.sealed)).not.toBeNull();
+		expect(openSealedBox(CUSTODIAN_SK, ring.copies[1]!.sealed)).not.toBeNull();
+	});
+
+	it('sends an undecodable keyring to the DLQ rather than acking it away', async () => {
+		const outcome = await handleKeyring(
+			{ envelope: frameEnvelope(new Uint8Array(200).fill(9), ALG_VAULT_KEYRING) },
+			deps()
+		);
+		expect(outcome.disposition).toBe('retry');
+		expect(outcome.reason).toBe('keyring_undecodable');
+	});
+
+	it('retries rather than acks when storage fails', async () => {
+		const outcome = await handleKeyring(
+			{ envelope: keyringEnvelope() },
+			deps({
+				recordKeyring: vi.fn(async () => {
+					throw new Error('d1 down');
+				})
+			})
+		);
+		expect(outcome).toEqual({ disposition: 'retry', reason: 'keyring_store_failed' });
+	});
+
+	it('routes the queue kind to the keyring handler', async () => {
+		const recordKeyring = vi.fn(async () => {});
+		const msg = message({ kind: 'evidence_keyring', envelope: keyringEnvelope() });
+		const outcomes = await handleBatch({ messages: [msg] } as never, deps({ recordKeyring }));
+		expect(outcomes[0]!.reason).toBe('keyring_stored');
+		expect(msg.ack).toHaveBeenCalledTimes(1);
+		expect(msg.retry).not.toHaveBeenCalled();
 	});
 });
