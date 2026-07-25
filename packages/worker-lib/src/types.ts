@@ -49,6 +49,10 @@ export interface ApiEnv extends FlagBindings {
 	RATE_LIMIT: DurableObjectNamespace;
 	/** Per-item §15 state machine. Hosted here; the consumer binds it cross-script. */
 	VERIFICATION_STATE: DurableObjectNamespace;
+	/** Strongly-consistent daily Neuron counter + degrade ladder. */
+	SPEND_CAP: DurableObjectNamespace;
+	/** One alarm for the whole re-review queue, never one per item. */
+	RE_REVIEW: DurableObjectNamespace;
 	MODERATION_BULK: Queue;
 	LIFE_SAFETY: Queue;
 	/** Read cache of the signed Key Directory + Revocation List (notice verify). */
