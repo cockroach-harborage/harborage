@@ -4,7 +4,7 @@ const config = {
 			mode: 'auto',
 			directives: {
 				'default-src': ['none'],
-				'script-src': ['self'],
+				'script-src': ['self', 'https://challenges.cloudflare.com'],
 				'style-src': ['self'],
 				'connect-src': ['self'],
 				'img-src': ['self', 'data:'],

@@ -33,12 +33,15 @@ export interface IntakeStatus {
 	directory_intake: boolean;
 	/** Hex public half of the intake sealed-box keypair, or null if unpublished. */
 	intake_key: string | null;
+	/** PUBLIC Turnstile sitekey, or null when no widget can be rendered. */
+	turnstile_sitekey: string | null;
 }
 
 const INTAKE_CLOSED: IntakeStatus = {
 	document_intake: false,
 	directory_intake: false,
-	intake_key: null
+	intake_key: null,
+	turnstile_sitekey: null
 };
 
 /** Read the public feature-flag booleans; default OFF (offline / error / flag off). */
@@ -50,7 +53,9 @@ export async function getIntakeStatus(fetchFn: typeof fetch = fetch): Promise<In
 		return {
 			document_intake: data.document_intake === true,
 			directory_intake: data.directory_intake === true,
-			intake_key: typeof data.intake_key === 'string' ? data.intake_key : null
+			intake_key: typeof data.intake_key === 'string' ? data.intake_key : null,
+			turnstile_sitekey:
+				typeof data.turnstile_sitekey === 'string' ? data.turnstile_sitekey : null
 		};
 	} catch {
 		return INTAKE_CLOSED;
@@ -184,7 +189,8 @@ export type SendOutcome = 'sent' | 'not_open' | 'failed';
 export async function sendRecord(
 	record: LocalDocument,
 	store: OutboxStore,
-	fetchFn: typeof fetch = fetch
+	fetchFn: typeof fetch = fetch,
+	turnstileToken = ''
 ): Promise<SendOutcome> {
 	const media = new MediaPresignClient(fetchFn);
 	const transport = new R2PartTransport(fetchFn);
@@ -210,7 +216,15 @@ export async function sendRecord(
 			);
 			const res = await fetchFn('/api/incidents/register', {
 				method: 'POST',
-				headers: { 'content-type': 'application/octet-stream', ...credential },
+				headers: {
+					'content-type': 'application/octet-stream',
+					// The api Worker has required this since M1 and the client never
+					// sent it, because no widget existed anywhere in the app. Intake
+					// switch-on would have returned 403 on every send — a blocker no
+					// test could see, since every test runs with the flag OFF.
+					'cf-turnstile-response': turnstileToken,
+					...credential
+				},
 				body: new Blob([envelope as BlobPart])
 			});
 			if (res.status === 403) throw new NotOpenError();

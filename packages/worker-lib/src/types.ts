@@ -66,6 +66,13 @@ export interface ApiEnv extends FlagBindings {
 	 * key and the client refuses to send (fail-closed).
 	 */
 	INTAKE_PUBLIC_KEY?: string;
+	/**
+	 * PUBLIC Turnstile sitekey. Embedded in the page by construction, so a var
+	 * rather than a secret, and served from /api/intake/status alongside the
+	 * intake public key. Absent ⇒ the client renders no widget and hides the
+	 * send affordance; the Worker refuses the write either way.
+	 */
+	TURNSTILE_SITEKEY?: string;
 }
 
 /** workers/media — M1 */

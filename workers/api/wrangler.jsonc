@@ -32,6 +32,12 @@
 		{ "tag": "v2", "new_sqlite_classes": ["VerificationState"] },
 		{ "tag": "v3", "new_sqlite_classes": ["SpendCap", "ReReviewQueue"] }
 	],
+	// The Turnstile sitekey is PUBLIC (it is embedded in the page). It travels as
+	// a var so GET /api/intake/status can hand it to the client alongside the
+	// intake public key; absent ⇒ the client hides the send affordance and the
+	// Worker still refuses the write. The matching SECRET is a wrangler secret,
+	// set by the deploy job, never in this file.
+	"vars": { "TURNSTILE_SITEKEY": "REPLACE_TURNSTILE_SITEKEY" },
 	"kv_namespaces": [
 		{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" },
 		// Read cache of the signed Key Directory + Revocation List (notice verify).
