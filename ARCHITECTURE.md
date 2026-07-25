@@ -191,7 +191,7 @@ BIP39 re-entry re-derives the whole tree. No server, no PII, no email/SMS reset 
 
 | Interaction | v1 primitive | Note |
 |---|---|---|
-| One-shot brokered first contact (triage/need/offer drop, helper pull) | **libsodium `crypto_box_seal`** to published X25519 prekey (sender-anonymous) | **This is the v1 brokered-channel crypto.** Fits "late reveal." |
+| One-shot brokered first contact (triage/need/offer drop, helper pull) | **`packages/crypto/sealed-box.ts`** to a rotating one-shot X25519 prekey (sender-anonymous) | **This is the v1 brokered-channel crypto** (corrected M4, 2026-07-26). Fits "late reveal." Same construction as libsodium's `crypto_box_seal` with HKDF in place of the blake2b derivation, `@noble` only, **no WASM**: it is already in the frozen tested module, and a 2G phone should not load 300 KB of WASM at the moment someone is injured. Both public keys are bound into the KDF info, so a captured ciphertext cannot be re-presented as sealed to a different recipient. |
 | Incident metadata envelope (register body) | **`packages/crypto/sealed-box.ts`** — ephemeral X25519 → HKDF-SHA-256 → XChaCha20-Poly1305, `@noble` only | **SEALED-TO-PLATFORM, never call it E2E.** See below. |
 | Sustained ephemeral 1:1 | X3DH + Double Ratchet + sealed-sender | **DEFERRED post-audit.** Rolling a browser Double Ratchet by volunteers is the roll-your-own trap — v1 ships sealed-box only. |
 | Small stable groups (case docs, n≈2–8) | Per-doc random CEK, **wrapped so recipient identity is not server-visible** (anonymous-recipient / trial-decryption), participant set held **off-platform** (lawyer-side) | Avoids materializing a case_ref→participant-pubkey collaboration graph (invariant). MLS deferred. |
@@ -204,7 +204,9 @@ The construction is libsodium's `crypto_box_seal` with HKDF in place of the blak
 
 **Prekey directory:** X3DH/sealed-box prekey bundles addressed by **opaque rotating handle** only (no list-all). **Prekey-fetch pairings are never persisted** and fetches ride the onion path where possible — otherwise the relay records a contact edge the invariants forbid.
 
-**Relay is content-blind:** Broker/Mailbox DO sees only `{rotating inbox_token, ciphertext or R2 pointer, expiry}`, in-memory; pull-based content-free long-poll; jittered alarm-tick delivery (timing decorrelation). No who-pulled-what, no token→identity map, nothing to DO SQLite.
+**Relay is content-blind:** Broker/Mailbox DO sees only `{rotating inbox_token, ciphertext, expiry}`, **in memory only**; pull-based content-free long-poll. No who-pulled-what, no token→identity map, nothing to DO SQLite.
+
+**Corrected at build (M4, 2026-07-26), twice.** (1) There is **no R2 pointer and no R2 path**: an object per message is a durable record, with a creation timestamp, that an exchange happened between two parties at a time, in a store whose retention we do not control and which a lawful order reaches. Object-store spill is deferred by name; a queue lost on eviction is the correct behaviour and the product copy says so. (2) There is **no alarm tick**, because a wholly-memory class cannot arm one: setting an alarm reaches the same durable interface `gate-memory-only` forbids, it bills as a row written, and the row is itself a PITR-visible record that something is pending at time T. Delivery is instead quantised to a **tick grid computed inside the in-flight long-poll** — the puller's own open request is both the clock and what keeps the instance resident. Every poll lasts a fixed number of ticks and returns a fixed-length padded body, so an empty poll and a delivering poll are indistinguishable **to the ISP and anyone downstream of TLS**; the padding happens inside Cloudflare's runtime and hides nothing from the platform itself.
 
 ### 5.4 Evidence vault key custody (resolves Decision 6)
 
@@ -430,7 +432,7 @@ An **owned Tor v3 `.onion` origin off Cloudflare** is the only configuration tha
 
 ### 9.3 Timing decorrelation
 
-Encrypted outbox dispatches **decorrelated from authoring** (foreground-flush + jitter — framed as a safety feature: "sends when you next open the app, from a fresh circuit"). Broker DOs mediate handshakes on a **fixed jittered alarm tick**. **Honest limit:** no constant-rate cover traffic is feasible on 2G/battery — decorrelation is *meaningful, not information-theoretic*, surfaced on medical/detention flows.
+Encrypted outbox dispatches **decorrelated from authoring** (foreground-flush + jitter — framed as a safety feature: "sends when you next open the app, from a fresh circuit"). Broker DOs mediate handshakes on a **fixed tick grid computed inside the in-flight long-poll** (corrected M4, 2026-07-26: a wholly-memory DO cannot arm an alarm, because setting one writes a durable PITR-visible row saying something is pending at time T). **Honest limit:** no constant-rate cover traffic is feasible on 2G/battery — decorrelation is *meaningful, not information-theoretic*, surfaced on medical/detention flows.
 
 ### 9.4 Notifications (resolves Decision 8 — critique-corrected)
 
@@ -653,7 +655,7 @@ Ordered most load-bearing first. Includes all OUTDATED / INCORRECT findings plus
 | @noble/ciphers | `^2.2.0` | One-shot XChaCha20-Poly1305 (wrap `managedNonce`); no streaming secretstream. |
 | @scure/bip39 | `^2.2.0` | ESM-only. |
 | @scure/base | `^2.2.0` | ESM-only. |
-| libsodium-wrappers-sumo | `^0.8.4` | `crypto_box_seal` + `crypto_secretstream`; ~300 KB WASM — lazy-load. |
+| libsodium-wrappers-sumo | `^0.8.4` | `crypto_secretstream` only, behind the evidence vault; ~300 KB WASM — lazy-load. (`crypto_box_seal` dropped M4: the brokered lane uses `packages/crypto/sealed-box.ts`, same construction with stronger KDF binding and no WASM.) |
 | shamir-secret-sharing (privy-io) | latest | Audited Cure53 + Zellic; raw SSS (no SLIP-39). |
 | @contentauth/c2pa-web | `^0.12.1` | Browser read/verify; C2PA 2.x. Pre-1.0. |
 | @contentauth/c2pa-node | `^0.6.1` | Node read/verify + signing. |
@@ -1176,7 +1178,7 @@ Production zone: `cockroachharborage.org` (value flows via `terraform.tfvars`, n
 | `ReReviewQueue` | SQLite | — | `api` | M2 |
 | `CoordinationWindow` | **memory-only** (CIB, alarm-purged) | wholly-memory | `api` | M3 |
 | `CustodyChain` | SQLite (archive hash-chain) | — | `api` | M3 |
-| `Broker` / `Mailbox` | **memory-only** routing + R2 ciphertext | wholly-memory | `api` | M4 |
+| `Broker` / `Mailbox` | **memory-only** routing; ciphertext in memory only, **no R2** (corrected M4: an object per message is a durable record that an exchange happened) | wholly-memory | `api` | M4 |
 | `LiveBoard` | **memory-only** (HLL shards + aggregator) | wholly-memory | `api` | M5 |
 | `DeadlineTimer` | SQLite (alarms, content-free payloads) | — | `api` | M5 |
 

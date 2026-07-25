@@ -55,6 +55,10 @@ export interface ApiEnv extends FlagBindings {
 	RE_REVIEW: DurableObjectNamespace;
 	/** Append-only custody ledger + Merkle checkpoints (ARCHITECTURE §7.2). */
 	CUSTODY_CHAIN: DurableObjectNamespace;
+	/** One per (region, category). Memory-only, content-blind routing (§5.3). */
+	BROKER: DurableObjectNamespace;
+	/** One per issued inbox token. Memory-only, fixed-length padded polls (§5.3). */
+	MAILBOX: DurableObjectNamespace;
 	MODERATION_BULK: Queue;
 	LIFE_SAFETY: Queue;
 	/** Read cache of the signed Key Directory + Revocation List (notice verify). */
@@ -88,6 +92,24 @@ export interface ApiEnv extends FlagBindings {
 	 * everyone on every network. That is the correct resting state.
 	 */
 	ONION_INGRESS_MAC_KEY?: string;
+	/**
+	 * Authenticates an inbox token and derives a broker instance name.
+	 *
+	 * It opens no ciphertext. A brokered message is sealed to a counterparty
+	 * one-shot prekey, and this key does not participate in that at all: the most
+	 * it could do in the wrong hands is mint routing tokens. Named parallel to
+	 * ONION_INGRESS_MAC_KEY so the distinction is legible, and deliberately not
+	 * named with a suffix that would imply otherwise, which is also why this
+	 * comment describes that choice rather than spelling the suffixes out.
+	 *
+	 * Verifying a token BEFORE any Durable Object is addressed is the point: a
+	 * forged token costs zero instances. Without it a caller could mint unbounded
+	 * Mailbox instances by inventing handles.
+	 *
+	 * ABSENT TODAY, and while it is absent every brokered route refuses for
+	 * everyone. That is the correct resting state.
+	 */
+	BROKER_INBOX_MAC_KEY?: string;
 }
 
 /** workers/media — M1 */
@@ -98,7 +120,9 @@ export interface ApiEnv extends FlagBindings {
  * rather than a silent new dependency on a third-party product.
  */
 export interface ImagesBinding {
-	info(stream: ReadableStream): Promise<{ format: string; fileSize: number; width?: number; height?: number }>;
+	info(
+		stream: ReadableStream
+	): Promise<{ format: string; fileSize: number; width?: number; height?: number }>;
 	input(stream: ReadableStream): {
 		transform(opts: { width?: number; height?: number }): {
 			output(opts: { format: string; quality?: number }): Promise<{ response(): Response }>;

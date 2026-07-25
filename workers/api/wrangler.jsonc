@@ -19,7 +19,9 @@
 			{ "name": "VERIFICATION_STATE", "class_name": "VerificationState" },
 			{ "name": "SPEND_CAP", "class_name": "SpendCap" },
 			{ "name": "RE_REVIEW", "class_name": "ReReviewQueue" },
-			{ "name": "CUSTODY_CHAIN", "class_name": "CustodyChain" }
+			{ "name": "CUSTODY_CHAIN", "class_name": "CustodyChain" },
+			{ "name": "BROKER", "class_name": "Broker" },
+			{ "name": "MAILBOX", "class_name": "Mailbox" }
 		]
 	},
 	// SQLite-backed (mandatory for new namespaces, 2026-07-09) but kept wholly
@@ -32,7 +34,13 @@
 		{ "tag": "v1", "new_sqlite_classes": ["RateLimit"] },
 		{ "tag": "v2", "new_sqlite_classes": ["VerificationState"] },
 		{ "tag": "v3", "new_sqlite_classes": ["SpendCap", "ReReviewQueue"] },
-		{ "tag": "v4", "new_sqlite_classes": ["CustodyChain"] }
+		{ "tag": "v4", "new_sqlite_classes": ["CustodyChain"] },
+		// Broker and Mailbox are SQLite-backed because new namespaces must be, and
+		// wholly in-memory because gate-memory-only says so: neither class touches
+		// storage, D1, R2 or a WebSocket attachment, and neither arms an alarm
+		// (setAlarm bills as a row written and is a PITR-visible record that
+		// something is pending). Nothing persists, so nothing is compellable.
+		{ "tag": "v5", "new_sqlite_classes": ["Broker", "Mailbox"] }
 	],
 	// The Turnstile sitekey is PUBLIC (it is embedded in the page). It travels as
 	// a var so GET /api/intake/status can hand it to the client alongside the
