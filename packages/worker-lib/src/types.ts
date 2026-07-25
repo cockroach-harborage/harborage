@@ -59,6 +59,15 @@ export interface ApiEnv extends FlagBindings {
 	BROKER: DurableObjectNamespace;
 	/** One per issued inbox token. Memory-only, fixed-length padded polls (§5.3). */
 	MAILBOX: DurableObjectNamespace;
+	/**
+	 * One per zone. Memory-only HLL sketches, no alarm, long-poll reads (§6).
+	 *
+	 * Not sharded: one instance per zone, with merge() built in the pure module so
+	 * a future shard-out is a routing change. The blocker is named there: sharding
+	 * needs a SHARED per-(zone, epoch) salt, or the same reporter yields a
+	 * different token per shard and the union inflates past the density floor.
+	 */
+	LIVE_BOARD: DurableObjectNamespace;
 	MODERATION_BULK: Queue;
 	LIFE_SAFETY: Queue;
 	/** Read cache of the signed Key Directory + Revocation List (notice verify). */
