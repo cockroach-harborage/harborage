@@ -1,0 +1,61 @@
+// workers/consumer — queue consumer (manifest §18.3). NO ROUTE: it is reachable
+// only by the queue, so there is no HTTP surface to attack and nothing to
+// rate-limit. REPLACE_* ids are injected in CI from `tofu output`.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "harborage-consumer",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-07-15",
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1
+	},
+	"workers_dev": false,
+	// A DLQ is MANDATORY on every consumer (infra/queues.tf says so). Without
+	// one, a message that fails max_retries times is dropped — and here a
+	// dropped message is a protestor's report of something that happened to
+	// them, gone with no trace and no way to know it was lost.
+	"queues": {
+		"consumers": [
+			{
+				"queue": "moderation-bulk",
+				"max_batch_size": 10,
+				"max_batch_timeout": 5,
+				"max_retries": 3,
+				"dead_letter_queue": "moderation-bulk-dlq",
+				"max_concurrency": 4
+			}
+		]
+	},
+	// Every other wrangler config in this repo runs on the 30s default. Tier-0
+	// work is milliseconds; a batch that somehow runs for 30s is a bug burning
+	// budget, and it should be cut off long before it gets there.
+	"limits": {
+		"cpu_ms": 5000
+	},
+	// The VerificationState class lives in harborage-api; bound cross-script, so
+	// api MUST deploy before this worker or the binding fails validation.
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "VERIFICATION_STATE",
+				"class_name": "VerificationState",
+				"script_name": "harborage-api"
+			}
+		]
+	},
+	"kv_namespaces": [
+		{ "binding": "FLAGS", "id": "REPLACE_KV_FLAGS_ID" },
+		// Tier-0 rulesets. KV-resident and NEVER committed: a published
+		// incitement lexicon is a bypass cheat-sheet, and gate-ai-tells would
+		// trip on its own vocabulary if it lived in the repo.
+		{ "binding": "RULESETS", "id": "REPLACE_KV_RULESETS_ID" }
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "harborage",
+			"database_id": "REPLACE_D1_ID"
+		}
+	]
+}

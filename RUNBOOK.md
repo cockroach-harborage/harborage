@@ -67,6 +67,27 @@ a second-provider account, a CI secret, and the provider host added to the deplo
 job's egress allowlist. Both are their own later slices; until then this M1
 readiness item is openly marked not-met.
 
+## M2 feature switch-on prerequisites
+
+- **Intake keypair.** Generate an X25519 pair offline. Set the private half as a
+  wrangler secret on `workers/consumer` (`INTAKE_PRIVATE_KEY`, hex) and the
+  public half as the `INTAKE_PUBLIC_KEY` var on `workers/api`. Until both exist,
+  `/api/intake/status` publishes no key and the client refuses to send, which is
+  the intended fail-closed state. The key opens the incident metadata envelope
+  only; it is registered and justified in `tools/gates/sensitive-endpoints.json`
+  and the endpoint is `SEALED-TO-PLATFORM`, never end-to-end.
+- **Tier-0 rulesets.** Put the lexicon in the `harborage-rulesets` KV namespace
+  under `tier0:v1` as JSON `{incitement, privatePii, directive, knownBadPhash}`.
+  It is deliberately NOT in the repository: a published incitement lexicon is a
+  bypass cheat-sheet. An absent or unreadable ruleset fails OPEN (matches
+  nothing), which is the safe direction for a screen — a missing lexicon must
+  not quarantine every report during a surge.
+- **Deploy token scope.** Registering a queue consumer is a different API
+  surface from the producer bindings `workers/api` already uses. If the deploy
+  fails with Cloudflare error 10000, add **Account → Queues → Edit** to
+  `HB_DEPLOY_TOKEN`. The consumer deploys last, so the other three Workers are
+  already out when that happens.
+
 ## M1 feature switch-on prerequisites
 
 M1 code ships behind fail-closed flags (all OFF). The D1 migrations

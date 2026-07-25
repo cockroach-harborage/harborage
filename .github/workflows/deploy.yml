@@ -278,10 +278,11 @@ jobs:
           KV_CONFIG_ID=$(tofu output -raw kv_config_id)
           KV_I18N_ID=$(tofu output -raw kv_i18n_id)
           KV_KEYDIR_CACHE_ID=$(tofu output -raw kv_keydir_cache_id)
+          KV_RULESETS_ID=$(tofu output -raw kv_rulesets_id)
           D1_ID=$(tofu output -raw d1_harborage_id)
           ACCESS_AUD=$(tofu output -raw access_console_aud)
           echo "::add-mask::${ACCESS_AUD}"
-          for id_var in KV_FLAGS_ID KV_CONFIG_ID KV_I18N_ID KV_KEYDIR_CACHE_ID D1_ID ACCESS_AUD; do
+          for id_var in KV_FLAGS_ID KV_CONFIG_ID KV_I18N_ID KV_KEYDIR_CACHE_ID KV_RULESETS_ID D1_ID ACCESS_AUD; do
             echo "${id_var}=${!id_var}" >> "$GITHUB_ENV"
           done
 
@@ -331,6 +332,22 @@ jobs:
           # media presigns direct-to-R2 uploads on /media/*. Behind document_intake
           # (OFF); the R2 presign secrets are set only at intake switch-on (RUNBOOK).
           sed -i "s/REPLACE_KV_FLAGS_ID/${KV_FLAGS_ID}/" wrangler.jsonc
+          pnpm exec wrangler deploy
+
+      - name: Deploy consumer
+        working-directory: workers/consumer
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.HB_DEPLOY_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
+        run: |
+          # LAST on purpose, and after `Deploy api` specifically: this Worker
+          # binds VerificationState cross-script from harborage-api, and a
+          # cross-script DO binding is validated at deploy time, so the class
+          # must already exist. Being last also bounds the blast radius —
+          # registering a queue consumer is a different API surface from the
+          # producer bindings api already uses, so if the deploy token turns out
+          # to lack the scope, the other three Workers are already out.
+          sed -i "s/REPLACE_KV_FLAGS_ID/${KV_FLAGS_ID}/; s/REPLACE_KV_RULESETS_ID/${KV_RULESETS_ID}/; s/REPLACE_D1_ID/${D1_ID}/" wrangler.jsonc
           pnpm exec wrangler deploy
 
       - name: Set console runtime secrets

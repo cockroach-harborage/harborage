@@ -22,7 +22,7 @@ import { join, relative } from 'node:path';
 import { repoRoot, walk, read, fail } from './lib.mjs';
 
 /** Where the autonomous decision path lives. */
-const TRUST_ROOTS = ['workers/api/src/verification', 'workers/consumer/src/verification'];
+const TRUST_ROOTS = ['packages/worker-lib/src/verification'];
 
 const EXPECTED_ACTIONS = ['label', 'rank', 'hide-pending', 'retain-pending', 'route-to-gate'];
 
