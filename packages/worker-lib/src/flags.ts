@@ -63,7 +63,15 @@ export const FLAG_NAMES = [
 	'live_board',
 	// Crowd bands only. Disabled ENTIRELY under heightened threat per §6.4, which
 	// is why it is a separate flag rather than part of live_board.
-	'crowd_bands'
+	'crowd_bands',
+	// The PUBLIC accountability surface: institutional patterns by station, unit,
+	// rank band and shift. Reversible, so it lives here. Naming an individual is a
+	// DIFFERENT and irreversible decision, gated by accountability_naming, which is
+	// deliberately absent from this list — with no entry, flagEnabled(kv,
+	// 'accountability_naming') does not typecheck, so the publish route's first
+	// statement can only be an unconditional refusal. gate-naming-gate enforces the
+	// absence, because "off" is a value someone flips.
+	'accountability_records'
 ] as const;
 
 export type FlagName = (typeof FLAG_NAMES)[number];

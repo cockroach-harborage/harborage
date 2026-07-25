@@ -24,10 +24,28 @@ describe('flag policy', () => {
 			'accountability_naming',
 			'evidence_unredaction',
 			'precise_location_reveal',
-			'permanent_delete'
+			'permanent_delete',
+			'detainee_intake',
+			'incommunicado_alert'
 		]) {
 			expect(isLocked(gate)).toBe(true);
 			expect(isFlippable(gate)).toBe(false);
+		}
+	});
+
+	/**
+	 * A LOCKED gate has NO RUNTIME READ PATH, which is stronger than being off.
+	 * With no FLAG_NAMES entry, flagEnabled(kv, 'accountability_naming') does not
+	 * typecheck, so a route cannot be written to consult it and its first statement
+	 * can only be an unconditional refusal. "Off" is a value someone flips.
+	 *
+	 * This is why the test above only requires FLIPPABLE to be a subset of
+	 * FLAG_NAMES: LOCKED entries are deliberately NOT known flags.
+	 */
+	it('keeps every locked gate out of FLAG_NAMES', () => {
+		const known = new Set<string>(FLAG_NAMES);
+		for (const gate of LOCKED) {
+			expect(known.has(gate), `${gate} must have no runtime read path`).toBe(false);
 		}
 	});
 
