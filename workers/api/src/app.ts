@@ -6,7 +6,12 @@
  * edge-cached, and searched client-side (no query logging).
  */
 import { Hono } from 'hono';
-import { isSealedEnvelope, MAX_ENVELOPE_LEN } from '@harborage/worker-lib/envelope';
+import {
+	ALG_VAULT_KEYRING,
+	isSealedEnvelope,
+	unframeEnvelope,
+	MAX_ENVELOPE_LEN
+} from '@harborage/worker-lib/envelope';
 import { featureAvailable, flagEnabled } from '@harborage/worker-lib/flags';
 import { coarseMs, safeLog, statusClass } from '@harborage/worker-lib/safe-log';
 import { verifyTurnstile } from '@harborage/worker-lib/turnstile';
@@ -116,6 +121,48 @@ app.post('/api/incidents/register', async (c) => {
 	//    incident.
 	await c.env.MODERATION_BULK.send({ kind: 'incident_register', envelope: buf });
 	return c.json({ receipt: crypto.randomUUID() }, 202, { 'cache-control': 'no-store' });
+});
+
+// POST /api/evidence/keyring — SEALED-E2E. The body is a keyring of content-key
+// copies, each sealed to a DIFFERENT off-platform holder (reporter vault key,
+// off-platform custodian, and for tier B an offshore half that every quorum
+// needs). The platform binds no key that opens any of them and exposes no
+// unwrap endpoint, which is what makes "we cannot produce plaintext" literally
+// true of the evidence original rather than a promise.
+//
+// Turnstile is deliberately NOT re-checked here. Its token is single-use and is
+// spent at /api/incidents/register, which gates this whole flow; re-demanding
+// one would fail every real submission. The per-request gate is the cap-cert +
+// proof of possession plus the rate ladder, same as the media presign routes.
+app.post('/api/evidence/keyring', async (c) => {
+	// 1. Structural, before any binding is touched: a framed sealed envelope,
+	//    size-capped. A plain-JSON or oversize body is refused by construction.
+	const ct = c.req.header('content-type') ?? '';
+	if (!ct.includes('application/octet-stream')) return c.text('sealed envelope required', 415);
+	const declared = Number(c.req.header('content-length') ?? '0');
+	if (declared > MAX_ENVELOPE_LEN) return c.text('too large', 413);
+	const buf = new Uint8Array(await c.req.arrayBuffer());
+	if (!isSealedEnvelope(buf)) return c.text('sealed envelope required', 400);
+	// The keyring lane has its own algorithm id, so a body sealed for a different
+	// custody class cannot be filed here and inherit this endpoint's claim.
+	const framing = unframeEnvelope(buf);
+	if (!framing || framing.algId !== ALG_VAULT_KEYRING)
+		return c.text('sealed envelope required', 400);
+
+	if (!(await broadOk(c))) return c.text('slow down', 429);
+	if (
+		!(await featureAvailable(c.env.FLAGS, 'evidence_vault', { disabledUnderHeightenedThreat: true }))
+	)
+		return c.text('not open', 403);
+
+	const credential = await credentialOk(c, buf, 'document');
+	if (!credential.ok) {
+		safeLog('credential_rejected', { route: c.req.routePath, outcome: credential.outcome });
+		return c.text('credential required', 401);
+	}
+
+	await c.env.MODERATION_BULK.send({ kind: 'evidence_keyring', envelope: buf });
+	return c.json({ ok: true }, 202, { 'cache-control': 'no-store' });
 });
 
 // --- Report-a-problem (route-to-gate) ---------------------------------------

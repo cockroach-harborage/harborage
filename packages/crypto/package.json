@@ -15,8 +15,10 @@
 		"./notice": "./src/notice.ts",
 		"./pack": "./src/pack.ts",
 		"./sealed-box": "./src/sealed-box.ts",
+		"./shamir": "./src/shamir.ts",
 		"./signature": "./src/signature.ts",
-		"./sodium": "./src/sodium.ts"
+		"./sodium": "./src/sodium.ts",
+		"./vault-key": "./src/vault-key.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc -p tsconfig.json",

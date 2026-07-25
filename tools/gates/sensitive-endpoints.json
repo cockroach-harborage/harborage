@@ -16,6 +16,12 @@
 				"binding": "INTAKE_PRIVATE_KEY",
 				"why": "Private half of the intake sealed-box keypair, held as a wrangler secret on workers/consumer ONLY. The consumer is the sole reader of the metadata envelope and the first writer of the incidents table. api, web and console must never bind it: they have no reason to read the body, and holding it there would widen the blast radius of an edge compromise for nothing. It opens the incident metadata envelope and no other sealed object."
 			}
+		},
+		{
+			"endpoint": "POST /api/evidence/keyring",
+			"class": "SEALED-E2E",
+			"sealed_object": "evidence-content-key",
+			"note": "The content-key ring for one evidence original: copies sealed to the reporter's vault key and to an off-platform custodian, and for tier B an offshore half that every quorum needs. The platform binds NO key that opens any copy and exposes no unwrap endpoint, so \"we cannot produce plaintext\" is literally true of this sealed object. INTAKE_PRIVATE_KEY opens the incident-metadata-envelope lane and says nothing about this one, which is exactly the distinction the sealed_object scoping exists to record."
 		}
 	]
 }

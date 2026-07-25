@@ -17,10 +17,21 @@ export const MAGIC = new Uint8Array([0x48, 0x42, 0x45, 0x31]);
 export const ALG_XCHACHA20POLY1305 = 1;
 /** Anonymous sealed box: ephemeral X25519 ‖ nonce ‖ ciphertext (§19.1). */
 export const ALG_SEALED_BOX_X25519 = 2;
+/**
+ * Evidence-vault content-key ring (§5.4): several sealed boxes, each to a
+ * DIFFERENT off-platform holder, under one header binding them to one file.
+ *
+ * Its own algorithm id rather than reusing 2, because the custody claim differs
+ * and should be legible on the wire: no platform key opens any copy in a
+ * keyring, and `gate-sealed-body` records that as a distinct sealed object.
+ */
+export const ALG_VAULT_KEYRING = 3;
 
 const HEADER_LEN = MAGIC.length + 1; // magic + algId
 const SEAL_MIN = 24 + 16; // nonce + Poly1305 tag
 const SEALED_BOX_MIN = 32 + SEAL_MIN; // ephemeral public key + nonce + tag
+/** version + tier + original digest + copy count, then at least one copy. */
+const KEYRING_MIN = 1 + 1 + 32 + 1 + (1 + 2 + SEALED_BOX_MIN);
 
 /**
  * Shortest framed envelope PER ALGORITHM. A single global minimum would let a
@@ -29,7 +40,8 @@ const SEALED_BOX_MIN = 32 + SEAL_MIN; // ephemeral public key + nonce + tag
  */
 const MIN_BY_ALG = new Map<number, number>([
 	[ALG_XCHACHA20POLY1305, HEADER_LEN + SEAL_MIN],
-	[ALG_SEALED_BOX_X25519, HEADER_LEN + SEALED_BOX_MIN]
+	[ALG_SEALED_BOX_X25519, HEADER_LEN + SEALED_BOX_MIN],
+	[ALG_VAULT_KEYRING, HEADER_LEN + KEYRING_MIN]
 ]);
 
 /** Shortest possible framed envelope of any algorithm. */
@@ -37,7 +49,11 @@ export const MIN_ENVELOPE_LEN = HEADER_LEN + SEAL_MIN; // 45
 /** Register metadata is < 4 KiB (§19.1); cap the sealed body well under that. */
 export const MAX_ENVELOPE_LEN = 8 * 1024;
 
-const KNOWN_ALGS = new Set<number>([ALG_XCHACHA20POLY1305, ALG_SEALED_BOX_X25519]);
+const KNOWN_ALGS = new Set<number>([
+	ALG_XCHACHA20POLY1305,
+	ALG_SEALED_BOX_X25519,
+	ALG_VAULT_KEYRING
+]);
 
 /** Wrap a seal() output for the wire. */
 export function frameEnvelope(
