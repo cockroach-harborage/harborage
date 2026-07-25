@@ -73,7 +73,20 @@ const config = {
 			// /archive/verify is deliberately unlinked from the tab bar: it is for
 			// someone checking a record they were handed, not a browse destination.
 			// The crawler cannot find it, so it is named here or it never renders.
-			entries: ['/', '/hi', '/limits', '/hi/limits', '/archive/verify', '/hi/archive/verify']
+			// /nearby/report is reachable from /nearby, so the crawler finds it. Named
+			// anyway, with the reason: /nearby only renders the link once the zone
+			// list verifies, and the pinned publisher directory is empty, so on a
+			// production build the crawler walks a page where that link is absent.
+			entries: [
+				'/',
+				'/hi',
+				'/limits',
+				'/hi/limits',
+				'/archive/verify',
+				'/hi/archive/verify',
+				'/nearby/report',
+				'/hi/nearby/report'
+			]
 		}
 	}
 };

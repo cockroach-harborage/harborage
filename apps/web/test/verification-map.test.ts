@@ -4,7 +4,8 @@ import {
 	INCIDENT_STATES,
 	directoryLabelKind,
 	incidentLabelKind,
-	type LabelKind
+	type LabelKind,
+	boardLabelKind
 } from '../src/lib/verification-map.ts';
 
 // The public label is the entire basis on which a reader decides whether to act
@@ -83,5 +84,40 @@ describe('directory state -> public label', () => {
 		for (const state of DIRECTORY_STATES) {
 			expect(['team', 'nearby', 'unchecked', 'problem']).toContain(directoryLabelKind(state));
 		}
+	});
+});
+
+describe('board rows use the four labels and nothing else', () => {
+	/**
+	 * A board row is not allowed its own vocabulary. A marshal quorum is two
+	 * role-bound signatures checked against the key directory — a person with a
+	 * hardware key attested to this — so it takes the "team" tier. Community
+	 * corroboration is the AUTONOMOUS CEILING and takes "nearby", which is the only
+	 * public string the autonomous layer may ever reach.
+	 */
+	it('maps a row to exactly one of the four kinds', () => {
+		expect(boardLabelKind({ corroborated: false, marshal_verified: true })).toBe('team');
+		expect(boardLabelKind({ corroborated: true, marshal_verified: true })).toBe('team');
+		expect(boardLabelKind({ corroborated: true, marshal_verified: false })).toBe('nearby');
+		expect(boardLabelKind({ corroborated: false, marshal_verified: false })).toBe('unchecked');
+	});
+
+	/**
+	 * NEVER 'problem' FROM THIS PATH. A board row is either attested, corroborated,
+	 * or not yet checked; there is no flagging mechanism on the live board, so
+	 * emitting the flagged label would be describing something that cannot happen.
+	 */
+	it('never claims a row was reported as a problem', () => {
+		for (const c of [true, false])
+			for (const mv of [true, false])
+				expect(boardLabelKind({ corroborated: c, marshal_verified: mv })).not.toBe('problem');
+	});
+
+	/**
+	 * The autonomous ceiling, asserted directly: no combination of community
+	 * corroboration alone reaches the "team" label. Only a marshal signature does.
+	 */
+	it('does not let corroboration alone reach the team label', () => {
+		expect(boardLabelKind({ corroborated: true, marshal_verified: false })).not.toBe('team');
 	});
 });
