@@ -18,6 +18,15 @@
 //    and "we can always purge" are mutually exclusive, and this is the choice.
 // 3. No query may join the public fingerprint index to the vault keyring table.
 //    Separately both are fine; together they are the oracle rule 1 removes.
+// 4. The source-import handler contains no outbound fetch, and the archive
+//    master handler never names the vault bucket.
+//
+// Rules 4 exist as GATES rather than unit tests on purpose. Both routes sit
+// behind a per-request credential, so a Workers unit test without a valid
+// cap-cert gets 401 and never reaches the code it means to check -- I wrote
+// both as behaviour tests first, sabotaged them, and watched them stay green.
+// A static check has no such blind spot: it refuses the code's existence rather
+// than its reachability.
 import { join, relative } from 'node:path';
 import { repoRoot, walk, read, fail } from './lib.mjs';
 
@@ -84,6 +93,47 @@ for (const top of ['workers', 'apps']) {
 					`${relative(repoRoot, file)} — a query joins the public fingerprint index to vault key custody; separately fine, together the existence oracle (§16)`
 				);
 			}
+		}
+	}
+}
+
+// Rule 4a: the import handler must make no outbound request. Re-hosting
+// someone else's media is counsel-gated, and the off-platform egress that would
+// make it safe to attempt does not exist.
+// Rule 4b: the master handler must never name the vault bucket.
+const HANDLERS = [
+	{
+		file: 'workers/api/src/app.ts',
+		start: "app.post('/api/archive/import'",
+		banned: [{ re: /\bfetch\s*\(/, why: 'makes an outbound request; source import is fingerprint-and-reference only (§16)' }]
+	},
+	{
+		file: 'workers/media/src/app.ts',
+		start: "app.post('/media/master'",
+		banned: [
+			{ re: /EVIDENCE_VAULT_BUCKET/, why: 'names the vault bucket; the master path reads and writes public media only (§16)' },
+			{ re: /IMAGES\s*\.\s*hosted/, why: 'uses the hosted Images namespace, which needs a paid plan and is not part of this design' }
+		]
+	}
+];
+
+for (const h of HANDLERS) {
+	const abs = join(repoRoot, h.file);
+	let text;
+	try {
+		text = read(abs);
+	} catch {
+		// The fixture trees do not all carry these files; absence is not a failure.
+		continue;
+	}
+	const from = text.indexOf(h.start);
+	if (from < 0) continue;
+	// The handler ends at the next top-level `app.` registration.
+	const after = text.indexOf('\napp.', from + 1);
+	const body = text.slice(from, after < 0 ? text.length : after);
+	for (const rule of h.banned) {
+		if (rule.re.test(body)) {
+			problems.push(`${h.file} — the ${h.start.split("'")[1]} handler ${rule.why}`);
 		}
 	}
 }
