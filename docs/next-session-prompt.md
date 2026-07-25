@@ -87,6 +87,7 @@ complete, abort, head, derivative}`.
 ## M4 — what is left (7 PRs)
 
 ### 1. `gate-onion-only` + registry
+
 `tools/gates/onion-only-endpoints.json` + `tools/gates/gate-onion-only.mjs`.
 Per entry: the route exists in `workers/**`; `requireOnionOrigin` appears inside
 **that route's handler block** (split router text on `app.<method>(`); and a test
@@ -94,6 +95,7 @@ in `workers/**/*.onion-only.test.ts` naming the endpoint with **≥2 `expect(`**
 and a **403**. Fixtures `{pass, fail-unguarded, fail-untested, fail-stale-route}`.
 
 ### 2. Compartments + one-shot identities
+
 - `ACTIVE_COMPARTMENTS` → `['document','directory','medical','aid']`. Ordinals
   are append-only and must not move (`medical`=5, `aid`=6).
 - `SIG_CONTEXT` gains `aidRequest`, `aidAccept` (keep `as const`, the
@@ -105,6 +107,7 @@ and a **403**. Fixtures `{pass, fail-unguarded, fail-untested, fail-stale-route}
   `credential.ts` gains `oneShotCredentialHeaders` that **never caches**.
 
 ### 3. `Broker` + `Mailbox` DOs (api tag **v5**)
+
 Already in `gate-memory-only`'s `WHOLLY_MEMORY`, so no gate edit — but see the
 alarm finding below. One `Broker` per `(region_bucket, category)`; one `Mailbox`
 per issued inbox token. **Every poll response padded to a fixed length**, so an
@@ -115,6 +118,7 @@ instance is addressed. New `ALG_BROKER_ONESHOT = 4` in `envelope.ts`, 4 KiB cap.
 happened, in a store the memory-only gate does not cover. Defer it by name.
 
 ### 4. Aid routes (`aid_broker` flag)
+
 `POST /api/aid/{offer,need,accept,poll}`, `aid` compartment. Three new
 `SEALED-E2E` lanes in `tools/gates/sensitive-endpoints.json` plus fixture
 families. Anti-honeypot: a need carries `H(secret)`; a responder is exposed only
@@ -122,12 +126,14 @@ after the preimage lands on a **second, separately-ticked** request; one
 responder at a time; per-responder acceptance cap.
 
 ### 5. Medical routes (`medical_broker` flag), onion-only
+
 `requireOnionOrigin` runs **first** — before the flag, before the credential,
 before any binding is read. A clearnet request to a life-safety route must not
 even cause a KV read. Makes `origin` a **required field on every**
 sealed-endpoint registry entry (edit the two existing ones to `"any"`).
 
 ### 6. `skills_registry` + capacity bands (migrations 0019, 0020)
+
 **No column from which a person could be reached**, and no route reads it row by
 row. The only public read is a Cron-materialized **band (`NONE`/`SOME`/`MANY`),
 never a count** — "two lawyers in this district" is a number small enough to act
@@ -136,10 +142,16 @@ every HIGH-tier offer refuses regardless of the flag (same structural pattern as
 `PINNED_CUSTODIAN_KEYS`). Accommodation routes only through `entity_type='ORG'`.
 
 ### 7. Client aid surfaces + `gate-jit-briefing` + life-safety consumer
+
 The briefing acknowledgement is **memory-only, never persisted** — persisting it
 makes the briefing shown-once, the opposite of just-in-time. `/get-help/medical`
-renders an **honest refusal** with a real alternative (112, `PUBLIC_INFRA` aid
-stations), never a dead end or "coming soon". `workers/consumer` gains the
+renders an **honest refusal**, never a dead end or "coming soon". **No state
+emergency number, anywhere** (decided 2026-07-26): India's integrated emergency
+line answers at a police control room, so on this platform it routes a protestor
+to the adversary. The alternative is `resource_entries` (`MEDICAL` /
+`PUBLIC_INFRA` aid stations), shown only when the downloaded pack actually holds
+a row, and `gate-ai-tells` now fails the build on a hardcoded dial link in app
+source or a state emergency number in copy. `workers/consumer` gains the
 `life-safety` queue with its own DLQ; payloads carry **no user content**.
 
 **Use `packages/crypto/src/sealed-box.ts`, not libsodium** — same construction,
@@ -182,7 +194,7 @@ M5 together must add **zero platform unseal keys**. `detainee_intake` joins
   alarm", §5.3/§18.3 "jittered alarm tick" and §6 as each class lands.**
 - **Compartment enum is closed, 8 entries, ordinals append-only** (they go on the
   wire): `document(0) directory(1) community(2) accountability(3) curation(4)
-  medical(5) aid(6) legal(7)`.
+medical(5) aid(6) legal(7)`.
 - **Cap-cert is self-issued and authorises nothing.** Sybil resistance is
   Turnstile + rate ladder + reputation, never the cert.
 - **Tier B vault custody is XOR-split, not plain Shamir** (§5.4 corrected).
@@ -224,10 +236,10 @@ reason.
   code under test.** Three tests asserted `not.toBe(200)` or intercepted `fetch`
   and stayed green when the guarded code was deleted. Two fixes: put **structural
   validation first** (before the credential) and assert the **exact** status; or
-  move the claim into a **gate**, which refuses the code's *existence* rather than
+  move the claim into a **gate**, which refuses the code's _existence_ rather than
   its reachability.
 - **Check EXIT CODES, never `grep -c` on output.** `pnpm typecheck 2>&1 | grep -c
-  ERRORS` returns 0 when the run fails *before* reaching the matched line. That is
+ERRORS` returns 0 when the run fails _before_ reaching the matched line. That is
   how a `node:fs/promises` typecheck break reached CI. Use
   `cmd >/dev/null 2>&1; echo $?`.
 - **`gate-sealed-body` scans COMMENTS.** A comment cannot spell out
@@ -248,7 +260,7 @@ reason.
 - **Stacked branches need rebasing after each merge**, or the PR shows
   CONFLICTING with no CI at all.
 - Run the FULL `pnpm typecheck && pnpm build && pnpm gates && pnpm pack:verify &&
-  pnpm test` before every commit. **RUN THE APP** for anything web-facing
+pnpm test` before every commit. **RUN THE APP** for anything web-facing
   (`pkill -f "wrangler dev"` first). `wrangler deploy --dry-run` before pushing
   binding changes.
 - `gate-selftest` requires every gate to have
@@ -293,6 +305,7 @@ gh api -X POST repos/cockroach-harborage/harborage/actions/runs/<RUN>/pending_de
 {"environment_ids":[18534075991],"state":"approved","comment":"..."}
 EOF
 ```
+
 (The `-f "environment_ids[]=..."` form fails with HTTP 422.)
 
 **Nothing blocks you.** `docs/maintainer-walkthrough.md` Part 2 §2.5–2.6 and

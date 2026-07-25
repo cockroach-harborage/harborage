@@ -43,10 +43,28 @@
 	</a>
 </div>
 
-<div class="list">
-	<a class="list-row" href="tel:112">
-		<Icon name="phone" />
-		<span class="row-label">{m.helpline_row()}</span>
-		<span class="card-sub">{m.helpline_112()}</span>
-	</a>
-</div>
+<!--
+	NO STATE EMERGENCY NUMBER, ANYWHERE (maintainer decision, 2026-07-26).
+
+	This page shipped a dial link to the integrated state emergency line. In India
+	that line answers at a police control room. On a platform whose stated
+	adversary is the state, handing a protestor that number routes them to the
+	adversary and discloses their situation and their cell to it.
+
+	So the number is gone, and it is not replaced by another one: every helpline
+	this app offers comes from `resource_entries`, which admits organisations that
+	consented to be listed and nothing else. The medical path is the "A doctor or
+	medicine" row above, which reaches those organisations. A row here would be
+	the same destination twice, so what replaces the block is the fact itself.
+
+	We do not tell anyone what to do with that fact. Someone bleeding may well
+	decide the call is worth it, and that is theirs to decide with the consequence
+	in front of them rather than hidden.
+
+	`tools/gates/gate-ai-tells.mjs` now fails the build on a hardcoded dial link in
+	any app source file, and on a state emergency number in any copy file, so this
+	cannot come back as a convenience during a later pass. The gate scans comments
+	too, which is why this one describes the number rather than spelling it.
+-->
+<p class="muted safety-copy">{m.no_state_helpline()}</p>
+<p class="muted safety-copy">{m.no_state_helpline_2()}</p>
