@@ -30,6 +30,12 @@ import {
 	dedupVerdict,
 	randomizedInclusionDelayMs
 } from '../src/archive/cohort.ts';
+import {
+	assembleBsaExport,
+	STATEMENT_PRESERVATION,
+	STATEMENT_UNSIGNED,
+	STATEMENT_WEAK_CLAIM
+} from '../src/archive/bsa-export.ts';
 
 const SHA_A = 'a'.repeat(64);
 /** Differs in the FIRST byte, which is inside the ten-byte anchor. */
@@ -222,5 +228,64 @@ describe('the cohort guards', () => {
 		expect(high).toBeGreaterThan(low);
 		expect(high).toBeLessThanOrEqual(CHECKPOINT_MAX_DELAY_MS);
 		expect(low).toBeGreaterThan(0);
+	});
+});
+
+describe('the section 63 export artifact', () => {
+	const base = {
+		anchor: 'c'.repeat(64),
+		citableId: citableId('c'.repeat(64)),
+		custodyLines: [],
+		builtBucket: '2026-07-25'
+	};
+
+	it('never asserts a vaulted original when the bytes were never vaulted', () => {
+		for (const status of ['none', 'on_device_only', 'vaulting', 'lost']) {
+			const out = assembleBsaExport({ ...base, originalStatus: status });
+			expect(out.custody_strength).toBe('registered_hash_only');
+			expect(out.statements).toContain(STATEMENT_WEAK_CLAIM);
+		}
+	});
+
+	it('asserts the stronger claim only once the vault confirmed the bytes', () => {
+		const out = assembleBsaExport({ ...base, originalStatus: 'vaulted' });
+		expect(out.custody_strength).toBe('vaulted_original');
+		expect(out.statements).not.toContain(STATEMENT_WEAK_CLAIM);
+	});
+
+	it('carries the preservation sentence verbatim, whatever the custody strength', () => {
+		for (const status of ['vaulted', 'lost']) {
+			expect(assembleBsaExport({ ...base, originalStatus: status }).statements).toContain(
+				STATEMENT_PRESERVATION
+			);
+		}
+	});
+
+	it('promises nothing about admissibility, in any statement', () => {
+		const out = assembleBsaExport({ ...base, originalStatus: 'vaulted' });
+		const text = out.statements.join(' ').toLowerCase();
+		for (const overclaim of ['is admissible', 'will be accepted', 'proves', 'court accepts']) {
+			expect(text).not.toContain(overclaim);
+		}
+		expect(text).toContain('not a guarantee');
+	});
+
+	it('emits an empty signature list from every input', () => {
+		// The platform assembles; a person in charge and a qualified expert sign
+		// off-platform. A server that could mint one would be forging them.
+		for (const status of ['vaulted', 'on_device_only']) {
+			expect(assembleBsaExport({ ...base, originalStatus: status }).signatures).toEqual([]);
+		}
+	});
+
+	it('reports no external anchor unless one is explicitly supplied', () => {
+		expect(assembleBsaExport({ ...base, originalStatus: 'vaulted' }).externally_anchored).toBe(false);
+	});
+
+	it('puts the limit on what we hold before the custody lines, not after', () => {
+		const out = assembleBsaExport({ ...base, originalStatus: 'lost' });
+		expect(out.statements.indexOf(STATEMENT_WEAK_CLAIM)).toBeLessThan(
+			out.statements.indexOf(STATEMENT_UNSIGNED)
+		);
 	});
 });

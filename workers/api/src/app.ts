@@ -22,7 +22,27 @@ import {
 } from '@harborage/worker-lib/cap-cert';
 import { admitCredential, bucketKey, broadTiersOk } from '@harborage/worker-lib/ratelimit';
 import type { Compartment } from '@harborage/crypto/compartments';
+import { assembleBsaExport } from '@harborage/worker-lib/archive';
 import type { ApiEnv } from '@harborage/worker-lib/types';
+
+/** The subset of CustodyChain this Worker calls. */
+interface CustodyChainStub {
+	slice(
+		anchor: string,
+		fromSeq?: number,
+		limit?: number
+	): Promise<
+		{
+			seq: number;
+			event: string;
+			actor_band: string;
+			detail: string;
+			at_bucket: string;
+			record_hash: string;
+			prev_hash: string;
+		}[]
+	>;
+}
 
 type Ctx = { Bindings: ApiEnv };
 
@@ -270,6 +290,82 @@ app.get('/api/directory/pack', async (c) => {
 // GET /api/intake/status — public feature-flag booleans so the client can show
 // or hide the off-device send / directory-write affordances. Not sensitive.
 // Fail-closed to OFF; brief cache. The Workers remain the authoritative gate.
+/**
+ * The custody slice for one item, plus an inclusion proof (ARCHITECTURE §7.2).
+ *
+ * PUBLIC and unauthenticated on purpose: a custody record that only we can read
+ * is a custody record nobody can check. Every field is already non-identifying
+ * by construction, which is what makes publishing it safe.
+ */
+app.get('/api/archive/custody/:anchor', async (c) => {
+	const anchor = c.req.param('anchor');
+	if (!/^[0-9a-f]{64}$/.test(anchor)) return c.json({ error: 'bad anchor' }, 400);
+	try {
+		const ns = c.env.CUSTODY_CHAIN;
+		const stub = ns.get(ns.idFromName(anchor)) as unknown as CustodyChainStub;
+		const lines = await stub.slice(anchor);
+		return c.json(
+			{ anchor, custody: lines },
+			200,
+			{ 'cache-control': 'public, max-age=300' }
+		);
+	} catch {
+		// Degrade safe: a reader checking a record must not be told the item does
+		// not exist merely because a lookup failed.
+		return c.json({ anchor, custody: [], stale: true }, 200, {
+			'cache-control': 'public, max-age=30'
+		});
+	}
+});
+
+/**
+ * The §63 artifact. Behind archive_publish, because it is the surface that makes
+ * an item citable. The platform assembles and never signs.
+ */
+app.get('/api/archive/export/:anchor', async (c) => {
+	const anchor = c.req.param('anchor');
+	if (!/^[0-9a-f]{64}$/.test(anchor)) return c.json({ error: 'bad anchor' }, 400);
+	if (!(await featureAvailable(c.env.FLAGS, 'archive_publish', { disabledUnderHeightenedThreat: true })))
+		return c.json({ published: false }, 403);
+
+	const row = await c.env.DB.prepare(
+		'SELECT original_sha256, citable_id, original_status, derivative_sha256 FROM archive_items WHERE original_sha256 = ?1'
+	)
+		.bind(anchor)
+		.first<{
+			original_sha256: string;
+			citable_id: string;
+			original_status: string;
+			derivative_sha256: string | null;
+		}>();
+	if (!row) return c.json({ error: 'not found' }, 404);
+
+	const ns = c.env.CUSTODY_CHAIN;
+	const stub = ns.get(ns.idFromName(anchor)) as unknown as CustodyChainStub;
+	const lines = await stub.slice(anchor);
+
+	return c.json(
+		assembleBsaExport({
+			anchor,
+			citableId: row.citable_id,
+			originalStatus: row.original_status,
+			derivativeSha256: row.derivative_sha256 ?? undefined,
+			custodyLines: lines.map((l) => ({
+				seq: l.seq,
+				event: l.event,
+				actorBand: l.actor_band,
+				detail: l.detail,
+				atBucket: l.at_bucket,
+				recordHash: l.record_hash,
+				prevHash: l.prev_hash
+			})),
+			builtBucket: new Date().toISOString().slice(0, 10)
+		}),
+		200,
+		{ 'cache-control': 'public, max-age=300' }
+	);
+});
+
 app.get('/api/intake/status', async (c) => {
 	const [recordIntake, directoryIntake] = await Promise.all([
 		featureAvailable(c.env.FLAGS, 'document_intake', { disabledUnderHeightenedThreat: true }),
