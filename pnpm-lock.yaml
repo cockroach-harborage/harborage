@@ -156,6 +156,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^5.20260724.1
         version: 5.20260724.1
+      '@harborage/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       jose:
         specifier: ^6.0.0
         version: 6.2.4
@@ -166,6 +169,9 @@ importers:
 
   workers/api:
     dependencies:
+      '@harborage/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
       '@harborage/worker-lib':
         specifier: workspace:*
         version: link:../../packages/worker-lib

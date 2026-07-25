@@ -4,3 +4,5 @@ export * from './flags.ts';
 export * from './access.ts';
 export * from './envelope.ts';
 export * from './turnstile.ts';
+export * from './cap-cert.ts';
+export * from './ratelimit.ts';

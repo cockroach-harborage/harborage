@@ -13,15 +13,12 @@
  */
 import { Hono } from 'hono';
 import { featureAvailable } from '@harborage/worker-lib/flags';
+import { bucketKey, broadTiersOk } from '@harborage/worker-lib/ratelimit';
 import { coarseMs, safeLog, statusClass } from '@harborage/worker-lib/safe-log';
 import type { MediaEnv } from '@harborage/worker-lib/types';
 import { EVIDENCE_VAULT_BUCKET, PUBLIC_MEDIA_BUCKET, R2S3, validateParts } from './s3.ts';
 
 type Ctx = { Bindings: MediaEnv };
-
-interface RateLimitStub {
-	allow(cost?: number): Promise<boolean>;
-}
 
 export const app = new Hono<Ctx>();
 
@@ -41,19 +38,18 @@ app.use('*', async (c, next) => {
 	});
 });
 
-async function bucketKey(ip: string): Promise<string> {
-	const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ip));
-	return Array.from(new Uint8Array(d).slice(0, 8), (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-/** App-layer rate limit keyed by a hash of the connecting IP (never logged/persisted). */
+/**
+ * Broad rungs of the shared ladder (§17.6). The per-credential rung lives on
+ * the api Worker, where the cap-cert is presented; presign requests are already
+ * gated behind a successful register on that side.
+ */
 async function rateOk(c: {
-	req: { header(name: string): string | undefined };
+	req: { header(name: string): string | undefined; raw: Request };
 	env: MediaEnv;
 }): Promise<boolean> {
-	const key = await bucketKey(c.req.header('CF-Connecting-IP') ?? 'unknown');
-	const stub = c.env.RATE_LIMIT.get(c.env.RATE_LIMIT.idFromName(key)) as unknown as RateLimitStub;
-	return stub.allow(1);
+	const keyHashHex = await bucketKey(c.req.header('CF-Connecting-IP') ?? 'unknown');
+	const asn = (c.req.raw as { cf?: { asn?: number } }).cf?.asn;
+	return broadTiersOk(c.env, { keyHashHex, asn });
 }
 
 /** Both gates: the feature flag (fail-closed OFF) and presence of presign creds. */

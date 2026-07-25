@@ -1,26 +1,29 @@
 {
-  "name": "@harborage/worker-lib",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts",
-    "./types": "./src/types.ts",
-    "./safe-log": "./src/safe-log.ts",
-    "./flags": "./src/flags.ts",
-    "./access": "./src/access.ts",
-    "./envelope": "./src/envelope.ts",
-    "./turnstile": "./src/turnstile.ts"
-  },
-  "scripts": {
-    "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "@cloudflare/workers-types": "^5.20260724.1",
-    "jose": "^6.0.0"
-  },
-  "devDependencies": {
-    "vitest": "^4.1.10"
-  }
+	"name": "@harborage/worker-lib",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./types": "./src/types.ts",
+		"./safe-log": "./src/safe-log.ts",
+		"./flags": "./src/flags.ts",
+		"./access": "./src/access.ts",
+		"./envelope": "./src/envelope.ts",
+		"./turnstile": "./src/turnstile.ts",
+		"./cap-cert": "./src/cap-cert.ts",
+		"./ratelimit": "./src/ratelimit.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc -p tsconfig.json",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@cloudflare/workers-types": "^5.20260724.1",
+		"jose": "^6.0.0",
+		"@harborage/crypto": "workspace:*"
+	},
+	"devDependencies": {
+		"vitest": "^4.1.10"
+	}
 }

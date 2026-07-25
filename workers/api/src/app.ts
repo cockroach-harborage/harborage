@@ -10,11 +10,14 @@ import { isSealedEnvelope, MAX_ENVELOPE_LEN } from '@harborage/worker-lib/envelo
 import { featureAvailable, flagEnabled } from '@harborage/worker-lib/flags';
 import { coarseMs, safeLog, statusClass } from '@harborage/worker-lib/safe-log';
 import { verifyTurnstile } from '@harborage/worker-lib/turnstile';
+import {
+	nonceRetentionMs,
+	verifyRequestCredential,
+	type CredentialResult
+} from '@harborage/worker-lib/cap-cert';
+import { admitCredential, bucketKey, broadTiersOk } from '@harborage/worker-lib/ratelimit';
+import type { Compartment } from '@harborage/crypto/compartments';
 import type { ApiEnv } from '@harborage/worker-lib/types';
-
-interface RateLimitStub {
-	allow(cost?: number): Promise<boolean>;
-}
 
 type Ctx = { Bindings: ApiEnv };
 
@@ -37,19 +40,46 @@ app.use('*', async (c, next) => {
 	});
 });
 
-async function bucketKey(ip: string): Promise<string> {
-	const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ip));
-	return Array.from(new Uint8Array(d).slice(0, 8), (b) => b.toString(16).padStart(2, '0')).join('');
+/**
+ * The broad rungs of the ladder (§17.6): a global shard and the origin ASN.
+ * Keyed off a hash of the connecting IP, which is never logged or persisted —
+ * it only picks which shard to charge.
+ */
+async function broadOk(c: { req: { header(name: string): string | undefined; raw: Request }; env: ApiEnv }) {
+	const keyHashHex = await bucketKey(c.req.header('CF-Connecting-IP') ?? 'unknown');
+	const asn = (c.req.raw as { cf?: { asn?: number } }).cf?.asn;
+	return broadTiersOk(c.env, { keyHashHex, asn });
 }
 
-/** App-layer rate limit keyed by a hash of the connecting IP (never logged/persisted). */
-async function rateOk(c: {
-	req: { header(name: string): string | undefined };
-	env: ApiEnv;
-}): Promise<boolean> {
-	const key = await bucketKey(c.req.header('CF-Connecting-IP') ?? 'unknown');
-	const stub = c.env.RATE_LIMIT.get(c.env.RATE_LIMIT.idFromName(key)) as unknown as RateLimitStub;
-	return stub.allow(1);
+/**
+ * Per-request credential: self-issued cap-cert + proof of possession, then the
+ * per-credential bucket and single-use nonce in one memory-DO call.
+ *
+ * A cap-cert authorises nothing (see @harborage/crypto/cap-cert). This proves
+ * only that the sender holds the key for this compartment and bound this exact
+ * request once. Personhood is Turnstile; volume is the ladder above.
+ *
+ * Every failure is a flat 401 with no detail. Telling a caller which check
+ * failed hands an attacker an oracle for probing clock skew and nonce state,
+ * and the reason is kept for the safeLog outcome only.
+ */
+async function credentialOk(
+	c: { req: { raw: Request }; env: ApiEnv },
+	body: Uint8Array,
+	compartment: Compartment
+): Promise<{ ok: boolean; outcome: string }> {
+	const result: CredentialResult = await verifyRequestCredential(c.req.raw, body, {
+		nowMs: Date.now(),
+		compartment
+	});
+	if (!result.ok) return { ok: false, outcome: result.reason };
+
+	const verdict = await admitCredential(c.env, {
+		certHashHex: result.certHashHex,
+		nonceHex: result.nonceHex,
+		retainMs: nonceRetentionMs({})
+	});
+	return { ok: verdict === 'ok', outcome: verdict };
 }
 
 // --- Sensitive intake: sealed-envelope-only, enqueue-and-return-fast ---------
@@ -64,17 +94,26 @@ app.post('/api/incidents/register', async (c) => {
 	const buf = new Uint8Array(await c.req.arrayBuffer());
 	if (!isSealedEnvelope(buf)) return c.text('sealed envelope required', 400);
 
-	// 2. Rate limit, then the fail-closed feature flag, then Turnstile.
-	if (!(await rateOk(c))) return c.text('slow down', 429);
+	// 2. Broad rate limit, then the fail-closed flag, then the per-request
+	//    credential, then Turnstile. The broad tiers come first so a flood is
+	//    throttled before it can spend a KV read or a signature verification.
+	if (!(await broadOk(c))) return c.text('slow down', 429);
 	if (
 		!(await featureAvailable(c.env.FLAGS, 'document_intake', { disabledUnderHeightenedThreat: true }))
 	)
 		return c.text('not open', 403);
+
+	const credential = await credentialOk(c, buf, 'document');
+	if (!credential.ok) {
+		safeLog('credential_rejected', { route: c.req.routePath, outcome: credential.outcome });
+		return c.text('credential required', 401);
+	}
+
 	if (!(await verifyTurnstile(c.req.header('cf-turnstile-response'), c.env.TURNSTILE_SECRET)))
 		return c.text('verification failed', 403);
 
 	// 3. Enqueue only — no D1 write on the hot path. The M2 consumer records the
-	//    incident. (Full cap-cert + PoP verification also lands with identity, M2.)
+	//    incident.
 	await c.env.MODERATION_BULK.send({ kind: 'incident_register', envelope: buf });
 	return c.json({ receipt: crypto.randomUUID() }, 202, { 'cache-control': 'no-store' });
 });
@@ -83,19 +122,32 @@ app.post('/api/incidents/register', async (c) => {
 // POST /api/directory/report — NOT sealed: a report is public, non-personal
 // {entity_id, reason_code}. Never auto-hides; only queues for human review.
 app.post('/api/directory/report', async (c) => {
-	const body = (await c.req.json().catch(() => null)) as {
-		entity_id?: unknown;
-		reason_code?: unknown;
-	} | null;
+	// Read the raw bytes: the proof of possession binds to exactly what arrived,
+	// so re-serialising the parsed JSON would break the signature.
+	const raw = new Uint8Array(await c.req.arrayBuffer());
+	type ReportBody = { entity_id?: unknown; reason_code?: unknown };
+	let body: ReportBody | null;
+	try {
+		body = JSON.parse(new TextDecoder().decode(raw)) as ReportBody;
+	} catch {
+		body = null;
+	}
 	if (!body || typeof body.entity_id !== 'string' || typeof body.reason_code !== 'string')
 		return c.text('bad request', 400);
-	if (!(await rateOk(c))) return c.text('slow down', 429);
+	if (!(await broadOk(c))) return c.text('slow down', 429);
 	if (
 		!(await featureAvailable(c.env.FLAGS, 'directory_intake', {
 			disabledUnderHeightenedThreat: true
 		}))
 	)
 		return c.text('not open', 403);
+
+	const credential = await credentialOk(c, raw, 'directory');
+	if (!credential.ok) {
+		safeLog('credential_rejected', { route: c.req.routePath, outcome: credential.outcome });
+		return c.text('credential required', 401);
+	}
+
 	if (!(await verifyTurnstile(c.req.header('cf-turnstile-response'), c.env.TURNSTILE_SECRET)))
 		return c.text('verification failed', 403);
 	// route-to-gate: no reporter identity, no auto-remove.

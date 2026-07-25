@@ -35,7 +35,8 @@ import {
 	isValidEpoch,
 	nextEpoch,
 	type Compartment,
-	type SigContext
+	type SigContext,
+	type SigningAlgId
 } from '@harborage/crypto/compartments';
 import {
 	detectCustodyTier,
@@ -342,6 +343,21 @@ export async function publicKeyFor(compartment: Compartment): Promise<Uint8Array
 	const meta = await readMeta();
 	const pub = meta?.publicKeys[compartment];
 	return pub ? unhex(pub) : null;
+}
+
+/**
+ * Which signature algorithm this device's key uses. A verifier must be told
+ * rather than guessing from a length, so it travels in the cap-cert.
+ */
+export async function signingAlgFor(compartment: Compartment): Promise<SigningAlgId | null> {
+	const meta = await readMeta();
+	if (!meta) return null;
+	const epoch = meta.epochs[compartment];
+	if (epoch === undefined) return null;
+	const key = (await (await db()).get(STORE_KEYS, keyId(compartment, epoch, 'sign'))) as
+		| DeviceSigningKey
+		| undefined;
+	return key?.algId ?? null;
 }
 
 /**
