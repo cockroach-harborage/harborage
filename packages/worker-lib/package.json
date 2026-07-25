@@ -13,7 +13,8 @@
 		"./turnstile": "./src/turnstile.ts",
 		"./cap-cert": "./src/cap-cert.ts",
 		"./ratelimit": "./src/ratelimit.ts",
-		"./verification": "./src/verification/machine.ts"
+		"./verification": "./src/verification/machine.ts",
+		"./reputation": "./src/reputation.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc -p tsconfig.json",

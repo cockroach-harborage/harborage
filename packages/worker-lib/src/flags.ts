@@ -23,6 +23,7 @@ export type FlagName =
 	| 'document_intake'
 	| 'incidents_publish'
 	| 'ai_moderation'
+	| 'community_corroborate'
 	| 'archive_anchoring';
 
 export async function flagEnabled(kv: KVNamespace, name: FlagName): Promise<boolean> {

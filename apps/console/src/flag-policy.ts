@@ -14,6 +14,11 @@ export const FLIPPABLE = [
 	'document_intake',
 	'incidents_publish',
 	'ai_moderation',
+	// Community corroboration + reputation WRITES. Off means the tables stay at
+	// zero rows: the schema exists so the code can be built and reviewed, and
+	// switch-on additionally waits on blind-token-carried reputation so the
+	// server holds no per-compartment list at all (§4.3).
+	'community_corroborate',
 	'archive_anchoring'
 ] as const;
 
