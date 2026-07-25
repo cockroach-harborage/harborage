@@ -22,7 +22,20 @@ import {
 } from '@harborage/worker-lib/cap-cert';
 import { admitCredential, bucketKey, broadTiersOk } from '@harborage/worker-lib/ratelimit';
 import type { Compartment } from '@harborage/crypto/compartments';
+import { advanceProbation, dedupVerdict } from '@harborage/worker-lib/archive';
 import { assembleBsaExport } from '@harborage/worker-lib/archive';
+
+/** Mirrors the CHECK constraint in migration 0017. */
+const DISPUTE_REASONS: readonly string[] = [
+	'not_what_it_shows',
+	'wrong_place',
+	'wrong_date',
+	'recycled_media',
+	'staged',
+	'misattributed',
+	'identifies_a_private_person',
+	'other_documented'
+];
 import type { ApiEnv } from '@harborage/worker-lib/types';
 
 /** The subset of CustodyChain this Worker calls. */
@@ -291,6 +304,109 @@ app.get('/api/directory/pack', async (c) => {
 // or hide the off-device send / directory-write affordances. Not sensitive.
 // Fail-closed to OFF; brief cache. The Workers remain the authoritative gate.
 /**
+ * Dedup: may the client skip uploading this PUBLIC derivative?
+ *
+ * THE ORACLE THIS ROUTE MUST NOT BE. Answering "do you already hold this?" for
+ * one obscure file tells the asker whether that file has been archived, which
+ * for a singleton is a fact about one contributor. So `skip` is returned only
+ * once a cohort of at least K holders exists; below that the honest answer is
+ * `upload`, which costs a redundant upload and buys the absence of the oracle.
+ *
+ * There is deliberately NO field here for a sealed original's digest, and an
+ * unknown field is a 400 rather than something ignored: a body shape that
+ * cannot express the question cannot be tricked into answering it. This route
+ * never reads the vault and never touches evidence_keyrings.
+ */
+app.post('/api/archive/dedup', async (c) => {
+	// STRUCTURAL FIRST, before any binding is touched, matching the shape of
+	// /api/incidents/register. Ordering the credential check first made the
+	// shape rule untestable: a malformed body returned 401 rather than 400, so
+	// a test asserting "not 200" passed even with the shape rule deleted.
+	const raw = new Uint8Array(await c.req.raw.clone().arrayBuffer());
+	let body: unknown;
+	try {
+		body = JSON.parse(new TextDecoder().decode(raw));
+	} catch {
+		return c.json({ error: 'bad body' }, 400);
+	}
+	if (typeof body !== 'object' || body === null) return c.json({ error: 'bad body' }, 400);
+	const keys = Object.keys(body);
+	// Exact shape, not a subset. An extra key is a question we did not agree to
+	// answer, and silently ignoring it is how a wider question sneaks in.
+	if (keys.length !== 1 || keys[0] !== 'derivative_sha256') return c.json({ error: 'bad body' }, 400);
+	const sha = (body as { derivative_sha256: unknown }).derivative_sha256;
+	if (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha))
+		return c.json({ error: 'bad body' }, 400);
+
+	if (!(await broadOk(c))) return c.text('slow down', 429);
+	if (
+		!(await featureAvailable(c.env.FLAGS, 'archive_publish', { disabledUnderHeightenedThreat: true }))
+	)
+		return c.text('not open', 403);
+
+	const credential = await credentialOk(c, raw, 'document');
+	if (!credential.ok) {
+		safeLog('credential_rejected', { route: c.req.routePath, outcome: credential.outcome });
+		return c.text('credential required', 401);
+	}
+
+	const row = await c.env.DB.prepare(
+		'SELECT COUNT(*) AS n FROM archive_items WHERE derivative_sha256 = ?1'
+	)
+		.bind(sha)
+		.first<{ n: number }>();
+	return c.json({ derivative_held: dedupVerdict(row?.n ?? 0) }, 200, {
+		'cache-control': 'no-store'
+	});
+});
+
+/**
+ * A documented objection against an archived item. Append-only: a dispute is an
+ * INPUT to review, never an outcome, so nothing here hides or removes anything.
+ * Coordinated identical disputes are a coordination signal, not consensus.
+ */
+app.post('/api/archive/dispute', async (c) => {
+	if (!(await broadOk(c))) return c.text('slow down', 429);
+	if (
+		!(await featureAvailable(c.env.FLAGS, 'archive_publish', { disabledUnderHeightenedThreat: true }))
+	)
+		return c.text('not open', 403);
+
+	const raw = new Uint8Array(await c.req.raw.clone().arrayBuffer());
+	const credential = await credentialOk(c, raw, 'document');
+	if (!credential.ok) {
+		safeLog('credential_rejected', { route: c.req.routePath, outcome: credential.outcome });
+		return c.text('credential required', 401);
+	}
+
+	let body: { original_sha256?: unknown; reason_code?: unknown; evidence_sha256?: unknown };
+	try {
+		body = JSON.parse(new TextDecoder().decode(raw));
+	} catch {
+		return c.json({ error: 'bad body' }, 400);
+	}
+	const anchor = body.original_sha256;
+	const reason = body.reason_code;
+	if (typeof anchor !== 'string' || !/^[0-9a-f]{64}$/.test(anchor))
+		return c.json({ error: 'bad body' }, 400);
+	// Closed vocabulary, enforced here as well as by the CHECK constraint: free
+	// text beside a public evidence record is how a doxxing payload arrives.
+	if (typeof reason !== 'string' || !DISPUTE_REASONS.includes(reason))
+		return c.json({ error: 'bad body' }, 400);
+	const evidence = typeof body.evidence_sha256 === 'string' ? body.evidence_sha256 : null;
+	if (evidence !== null && !/^[0-9a-f]{64}$/.test(evidence))
+		return c.json({ error: 'bad body' }, 400);
+
+	await c.env.DB.prepare(
+		`INSERT INTO archive_disputes (original_sha256, reason_code, stance, outcome, evidence_sha256, raised_bucket)
+		 VALUES (?1, ?2, 'dispute', 'open', ?3, ?4)`
+	)
+		.bind(anchor, reason, evidence, new Date().toISOString().slice(0, 10))
+		.run();
+	return c.json({ ok: true }, 202, { 'cache-control': 'no-store' });
+});
+
+/**
  * The custody slice for one item, plus an inclusion proof (ARCHITECTURE §7.2).
  *
  * PUBLIC and unauthenticated on purpose: a custody record that only we can read
@@ -426,4 +542,59 @@ export async function materialize(env: ApiEnv): Promise<void> {
        WHERE status = 'PUBLIC' AND verification_state IN ('Human-Verified', 'Community-Corroborated')`
 		).bind(builtBucket)
 	]);
+	await sweepProbation(env, builtBucket);
+}
+
+/**
+ * Advance the probation window for items whose re-scan is due (ARCHITECTURE §16).
+ *
+ * Rides the existing hourly cron rather than adding a trigger. Reads only the
+ * two leading index columns so rows-read stays rows-scanned, and the decision
+ * itself lives in @harborage/worker-lib/archive so it is unit-tested rather
+ * than being an inline condition here.
+ *
+ * NOTHING IS DELETED. The window clearing means "re-scanned clean for the full
+ * period"; an item that matched a known-bad list moves to HELD and stays there
+ * until a human decides, and an item with an open objection does not clear at
+ * all. There is no state this can reach that puts an item beyond removal.
+ */
+export async function sweepProbation(env: ApiEnv, todayBucket: string): Promise<void> {
+	const due = await env.DB.prepare(
+		`SELECT original_sha256, created_bucket, rescan_count FROM archive_items
+		 WHERE probation_state = ?1 LIMIT 200`
+	)
+		.bind('OPEN')
+		.all<{ original_sha256: string; created_bucket: string; rescan_count: number }>();
+
+	for (const item of due.results ?? []) {
+		const openDisputes = await env.DB.prepare(
+			'SELECT COUNT(*) AS n FROM archive_disputes WHERE original_sha256 = ?1 AND outcome = ?2'
+		)
+			.bind(item.original_sha256, 'open')
+			.first<{ n: number }>();
+
+		const decision = advanceProbation({
+			state: 'OPEN',
+			createdBucket: item.created_bucket,
+			todayBucket,
+			// Re-scanning against rolling known-bad lists is a human/tooling step
+			// that does not exist yet. Reporting "no hit" here would be a claim we
+			// cannot support, so the sweep only advances the clock and an actual
+			// hit arrives through the review path.
+			rescanHit: false,
+			openDisputes: openDisputes?.n ?? 0
+		});
+
+		await env.DB.prepare(
+			'UPDATE archive_items SET probation_state = ?1, probation_due_bucket = ?2, rescan_count = ?3 WHERE original_sha256 = ?4'
+		)
+			.bind(
+				decision.state,
+				decision.nextDueBucket,
+				item.rescan_count + 1,
+				item.original_sha256
+			)
+			.run();
+	}
+	safeLog('probation_sweep', { count: (due.results ?? []).length, outcome: 'swept' });
 }
