@@ -1,0 +1,14 @@
+{
+	"comment": "FAIL fixture: a stale entry, ISOLATED. The first entry is fully correct (guarded, registered, tested) so every other rule is satisfied; the second names a handler that no longer exists. The point of keeping the good entry is that this fixture must fail for ONE reason. An earlier version omitted it and was caught by the covering-test rule as well, which would have let the route-exists rule be deleted with the fixture still red.",
+	"why_this_matters": "A registry entry for a route that is gone reads as protection and is not. Worse, the handler it was renamed to is unlisted, so the stale line is what makes the gap look accounted for.",
+	"endpoints": [
+		{
+			"endpoint": "POST /api/things/triage",
+			"why": "Two source IPs arriving at one low-volume broker inside the jitter window is a pairing sealed-sender cannot hide."
+		},
+		{
+			"endpoint": "POST /api/things/gone",
+			"why": "Two source IPs arriving at one low-volume broker inside the jitter window is a pairing sealed-sender cannot hide."
+		}
+	]
+}
