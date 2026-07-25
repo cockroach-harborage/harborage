@@ -151,19 +151,28 @@ each item creates a credential or a live surface that did not exist.
 
 ### 2.1 Turnstile widget (before any intake flag)
 
-1. Cloudflare dashboard → **Turnstile** → Add widget.
-2. Hostname `cockroachharborage.org`. Mode **Managed** — *not* Invisible: an
-   Invisible widget gives a blocked Tor user no interaction and therefore no way
-   through, and Tor users are exactly who we must not lock out.
-3. Turn **off** `feedback-enabled`. It defaults **on** and reports visitor
-   feedback to Cloudflare — telemetry we should not emit from a protestor path.
-4. Copy the secret, then:
+**The widget itself will be code, not a dashboard click.** The Terraform provider
+has a `cloudflare_turnstile_widget` resource, so the mode, hostname and
+`feedback-enabled` setting belong in `infra/` where they are versioned and
+reviewable — a dashboard-created widget is exactly the unrecorded drift
+CLAUDE.md §"Infrastructure" forbids. I will add that resource when intake
+switch-on approaches.
+
+That leaves you two things a token cannot self-bootstrap:
+
+1. **Add `Account → Turnstile → Edit` to `HB_TERRAFORM_TOKEN`** and update the
+   secret in the GitHub `production` environment. Terraform then creates the
+   widget on the next deploy.
+2. **Read the widget secret once it exists** (dashboard → Turnstile → the
+   widget) and set it on the api worker — a secret value is the one part that
+   must not pass through Terraform state:
 
 ```bash
 cd workers/api && pnpm exec wrangler secret put TURNSTILE_SECRET
 ```
 
-5. Send me the **sitekey** (public) so I can wire the widget into the client.
+The sitekey is public and comes out of Terraform state, so I wire that into the
+client without you copying anything.
 
 ### 2.2 R2 presign token (before `document_intake`)
 
