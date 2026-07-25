@@ -83,6 +83,15 @@ interface SignalState {
 interface Waiter {
 	resolve(view: BoardView): void;
 	timer: ReturnType<typeof setTimeout>;
+	/**
+	 * The posture this reader parked under.
+	 *
+	 * wake() used to compose ONE view for everybody. A heightened-threat reader
+	 * parked next to an ordinary one would then be handed the ordinary view: the
+	 * crowd band and the un-tightened signal set, delivered at exactly the moment
+	 * the mode exists to withhold them. Carried per waiter so that cannot happen.
+	 */
+	heightened: boolean;
 }
 
 export class LiveBoard extends DurableObject {
@@ -172,22 +181,23 @@ export class LiveBoard extends DurableObject {
 	 * path is a long poll rather than a socket.
 	 */
 	async view(
-		opts: { sinceTick?: number; waitMs?: number; nowMs?: number } = {}
+		opts: { sinceTick?: number; waitMs?: number; nowMs?: number; heightened?: boolean } = {}
 	): Promise<BoardView> {
 		const nowMs = opts.nowMs ?? Date.now();
+		const heightened = opts.heightened ?? false;
 		await this.rotateIfDue(nowMs);
 		this.expire(nowMs);
 
-		const current = this.compose(nowMs);
+		const current = this.compose(nowMs, heightened);
 		const waitMs = Math.min(opts.waitMs ?? 0, MAX_WAIT_MS);
 		if (waitMs <= 0 || (opts.sinceTick ?? -1) !== current.tick) return current;
 
 		return new Promise<BoardView>((resolve) => {
 			const timer = setTimeout(() => {
 				this.waiters = this.waiters.filter((w) => w.timer !== timer);
-				resolve(this.compose(Date.now()));
+				resolve(this.compose(Date.now(), heightened));
 			}, waitMs);
-			this.waiters.push({ resolve, timer });
+			this.waiters.push({ resolve, timer, heightened });
 		});
 	}
 
@@ -351,10 +361,18 @@ export class LiveBoard extends DurableObject {
 	/** Release every parked reader, so a new report reaches them at once. */
 	private wake(nowMs: number): void {
 		if (this.waiters.length === 0) return;
-		const view = this.compose(nowMs);
 		const parked = this.waiters;
 		this.waiters = [];
+		// Composed per POSTURE, not once for everybody. There are only ever two, so
+		// this costs at most one extra compose and removes the possibility of
+		// waking a heightened-threat reader with an ordinary view.
+		const byPosture = new Map<boolean, BoardView>();
 		for (const w of parked) {
+			let view = byPosture.get(w.heightened);
+			if (!view) {
+				view = this.compose(nowMs, w.heightened);
+				byPosture.set(w.heightened, view);
+			}
 			clearTimeout(w.timer);
 			w.resolve(view);
 		}
@@ -398,13 +416,6 @@ export class LiveBoard extends DurableObject {
 	/** Occupied registers, for tests only. Never reachable from a route. */
 	async occupiedForTest(): Promise<number> {
 		return occupied(this.density);
-	}
-
-	/** Compose under heightened threat, for the read route. */
-	async viewHeightened(nowMs = Date.now()): Promise<BoardView> {
-		await this.rotateIfDue(nowMs);
-		this.expire(nowMs);
-		return this.compose(nowMs, true);
 	}
 
 	/** The band vocabulary, so a caller cannot invent one. */
