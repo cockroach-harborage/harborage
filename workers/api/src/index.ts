@@ -13,6 +13,8 @@ export { VerificationState } from './do/VerificationState.ts';
 export { SpendCap } from './do/SpendCap.ts';
 export { ReReviewQueue } from './do/ReReviewQueue.ts';
 export { CustodyChain } from './do/CustodyChain.ts';
+export { Broker } from './do/Broker.ts';
+export { Mailbox } from './do/Mailbox.ts';
 
 export default {
 	fetch: (req: Request, env: ApiEnv, ctx: ExecutionContext) => app.fetch(req, env, ctx),
