@@ -15,3 +15,4 @@ export * from './citable-id.ts';
 export * from './probation.ts';
 export * from './cohort.ts';
 export * from './bsa-export.ts';
+export * from './admission.ts';
