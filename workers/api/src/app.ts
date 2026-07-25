@@ -1324,7 +1324,6 @@ export function offerEpochOf(nowMs: number): number {
 	return Math.floor(nowMs / OFFER_EPOCH_MS);
 }
 
-
 // --- The live board (ARCHITECTURE §6; PRD §4.5) -------------------------------
 
 /** The slice of LiveBoard this Worker calls. */
@@ -1335,9 +1334,96 @@ interface LiveBoardStub {
 		certHashHex: string;
 		marshalValid?: boolean;
 	}): Promise<'accepted'>;
-	view(opts: { sinceTick?: number; waitMs?: number }): Promise<BoardView>;
-	viewHeightened(): Promise<BoardView>;
+	view(opts: { sinceTick?: number; waitMs?: number; heightened?: boolean }): Promise<BoardView>;
 }
+
+/** Longest a reader may hold the connection open. Mirrors LiveBoard's own clamp. */
+const LIVE_MAX_WAIT_MS = 25_000;
+
+/**
+ * GET /api/live/:zone — the public board for one zone.
+ *
+ * THERE IS NO CREDENTIAL AND NO RATE LIMIT ON THIS ROUTE, and both are decisions
+ * rather than omissions.
+ *
+ * No credential, because §5 says never gate READING public safety info. A person
+ * who has just walked into tear gas is not going to solve a Turnstile.
+ *
+ * No rate limit, and this is the sharper one. broadTiersOk keys a bucket on the
+ * ASN. Every protestor on one carrier in one city shares an ASN, so an ASN bucket
+ * on this route would saturate exactly when a crackdown sends everybody to the
+ * app at once, and the hazard board would go dark for a whole network at the
+ * moment it matters most. That is precisely the failure §6.5 forbids. What
+ * bounds the cost instead: the zone list is closed and signed (zero rows today),
+ * so the number of addressable Durable Objects is fixed by the list and not by
+ * the request rate; the poll duration is clamped; and volumetric L7 is
+ * Cloudflare's managed ruleset, per the standing division of labour.
+ *
+ * THE THREE READ SHAPES ARE DISTINGUISHABLE, following /api/help/capacity. A
+ * reader must be able to tell "we are not publishing" from "we could not read"
+ * from "there is nothing here", because a test asserting only signals.length === 0
+ * passes for all three and so does a client that renders them the same way.
+ */
+app.get('/api/live/:zone', async (c) => {
+	const zoneId = c.req.param('zone');
+	if (!isZoneId(zoneId)) return c.json({ error: 'bad zone' }, 400);
+
+	const headers = {
+		// A cached board is a stale board served as fresh. The staleness contract
+		// lives in the client, and it needs the tick to evaluate it.
+		'cache-control': 'no-store'
+	};
+
+	if (!(await flagEnabled(c.env.FLAGS, 'live_board')))
+		return c.json({ published: false, stale: false, board: null }, 200, headers);
+
+	// Heightened threat TIGHTENS this route, it never closes it. Bands are the
+	// part that goes away entirely (§6.4); TEAR_GAS is not.
+	const [heightened, bandsOn] = await Promise.all([
+		flagEnabled(c.env.FLAGS, 'heightened_threat'),
+		featureAvailable(c.env.FLAGS, 'crowd_bands', { disabledUnderHeightenedThreat: true })
+	]);
+
+	try {
+		const row = await c.env.DB.prepare(
+			'SELECT zone_id FROM live_zones WHERE zone_id = ?1 AND active = 1'
+		)
+			.bind(zoneId)
+			.first<{ zone_id: string }>();
+		// The zone list is public and signed, so a 404 leaks nothing and tells a
+		// client something it can act on: its copy of the list is out of date.
+		if (row === null) return c.json({ error: 'unknown zone' }, 404, headers);
+	} catch {
+		// A READ failing closed would be the board going dark, so it fails to
+		// stale instead and the client keeps its cached rows under a STALE badge.
+		return c.json({ published: true, stale: true, board: null }, 200, headers);
+	}
+
+	const waitRaw = Number.parseInt(c.req.query('wait') ?? '0', 10);
+	const sinceRaw = Number.parseInt(c.req.query('since') ?? '', 10);
+
+	const ns = c.env.LIVE_BOARD;
+	let view: BoardView;
+	try {
+		view = await (ns.get(ns.idFromName(`zone:${zoneId}`)) as unknown as LiveBoardStub).view({
+			waitMs: Math.min(Number.isFinite(waitRaw) ? Math.max(waitRaw, 0) : 0, LIVE_MAX_WAIT_MS),
+			...(Number.isFinite(sinceRaw) ? { sinceTick: sinceRaw } : {}),
+			heightened
+		});
+	} catch {
+		return c.json({ published: true, stale: true, board: null }, 200, headers);
+	}
+
+	// The Worker nulls the band, not the Durable Object. The DO knows about
+	// heightened threat because that is a threshold question it has to answer
+	// anyway, but it cannot read KV and so cannot know whether crowd_bands is on
+	// at all. Two independent conditions, one of them enforced here.
+	const board: BoardView = bandsOn ? view : { ...view, band: null };
+	return c.json({ published: true, stale: false, board }, 200, {
+		...headers,
+		'x-hb-tick': String(view.tick)
+	});
+});
 
 /**
  * POST /api/live/report — one hazard signal for one zone.
@@ -1373,7 +1459,11 @@ app.post('/api/live/report', async (c) => {
 	for (const k of keys) {
 		if (!allowed.includes(k)) return c.json({ error: 'bad body' }, 400);
 	}
-	const { zone_id: zoneId, signal, marshal } = body as {
+	const {
+		zone_id: zoneId,
+		signal,
+		marshal
+	} = body as {
 		zone_id?: unknown;
 		signal?: unknown;
 		marshal?: unknown;
@@ -1417,8 +1507,7 @@ app.post('/api/live/report', async (c) => {
 	let marshalValid = false;
 	if (requiresQuorum(signal as SignalType)) {
 		const bundle = marshal as { signatures?: RoleSignature[]; hashHex?: string } | undefined;
-		if (!bundle?.signatures || typeof bundle.hashHex !== 'string')
-			return c.text('not open', 403);
+		if (!bundle?.signatures || typeof bundle.hashHex !== 'string') return c.text('not open', 403);
 		const directory = await c.env.DB.prepare(
 			"SELECT key_id, public_key, role, valid_from_epoch, valid_to_epoch FROM key_directory WHERE role = 'marshal'"
 		).all<{

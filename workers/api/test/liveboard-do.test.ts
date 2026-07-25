@@ -245,11 +245,57 @@ describe('the view carries nothing a reader could count', () => {
 		expect(LiveBoard.bands).toContain(view.band as string);
 	});
 
+	/**
+	 * THE BUG THIS TEST EXISTS FOR. wake() composed one view and handed it to every
+	 * parked reader, so a heightened-threat reader waiting next to an ordinary one
+	 * was woken with the ORDINARY view: crowd band present, thresholds un-tightened,
+	 * delivered at exactly the moment the mode exists to withhold them. Found by
+	 * giving the read route a heightened long-poll, which the DO had no way to
+	 * express before.
+	 */
+	it('wakes each parked reader under its own posture', async () => {
+		const board = newBoard();
+		await reportN(board, 40, T0);
+		const at = T0 + PUBLISHED;
+		vi.setSystemTime(new Date(at));
+
+		const tick = (await board.view({ nowMs: at })).tick;
+		const ordinary = board.view({ nowMs: at, sinceTick: tick, waitMs: 20_000 });
+		const tightened = board.view({ nowMs: at, sinceTick: tick, waitMs: 20_000, heightened: true });
+
+		// One report wakes both, from the same compose pass.
+		await board.report({
+			zoneId: ZONE,
+			signal: 'POLICE_MOVEMENT',
+			certHashHex: tok(99),
+			nowMs: at
+		});
+		expect((await ordinary).band).not.toBeNull();
+		expect((await tightened).band).toBeNull();
+	});
+
+	/**
+	 * The OTHER exit from a parked read. A poll that nobody wakes resolves from its
+	 * own timer, on a separate line, and that line had the same defect. Two exits,
+	 * two tests, because fixing one and not the other looks identical from here.
+	 */
+	it('resolves a timed-out poll under its own posture', async () => {
+		const board = newBoard();
+		await reportN(board, 40, T0);
+		const at = T0 + PUBLISHED;
+		vi.setSystemTime(new Date(at));
+
+		const tick = (await board.view({ nowMs: at })).tick;
+		const tightened = board.view({ nowMs: at, sinceTick: tick, waitMs: 5_000, heightened: true });
+		await vi.advanceTimersByTimeAsync(6_000);
+		expect((await tightened).band).toBeNull();
+	});
+
 	/** §6.4: bands are disabled ENTIRELY under heightened threat, not coarsened. */
 	it('drops the band to null under heightened threat', async () => {
 		const board = newBoard();
 		await reportN(board, 40, T0);
-		expect((await board.viewHeightened(T0 + PUBLISHED)).band).toBeNull();
+		expect((await board.view({ nowMs: T0 + PUBLISHED, heightened: true })).band).toBeNull();
 	});
 });
 
