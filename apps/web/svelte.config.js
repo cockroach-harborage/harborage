@@ -85,7 +85,11 @@ const config = {
 				'/archive/verify',
 				'/hi/archive/verify',
 				'/nearby/report',
-				'/hi/nearby/report'
+				'/hi/nearby/report',
+				// Not in the tab bar: accountability is a destination people are sent
+				// to, not one they browse into, so the crawler never finds it.
+				'/accountability',
+				'/hi/accountability'
 			]
 		}
 	}

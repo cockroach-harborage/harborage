@@ -32,6 +32,9 @@
 		"archive_provenance",
 		"archive_disputes",
 		"archive_source_refs",
-		"live_zones"
+		"live_zones",
+		"accountability_records",
+		"plainclothes_claims",
+		"reviewer_role_keys"
 	]
 }

@@ -26,6 +26,7 @@ const ROUTES = [
 	'/nearby/report',
 	'/directory',
 	'/incidents',
+	'/accountability',
 	'/limits',
 	'/settings',
 	'/settings/language',

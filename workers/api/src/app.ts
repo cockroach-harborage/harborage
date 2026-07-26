@@ -1338,6 +1338,53 @@ interface LiveBoardStub {
 }
 
 /**
+ * GET /api/accountability/records — the public institutional record.
+ *
+ * WHY THIS SERVES THE INDIVIDUAL IDENTIFIER AT ALL. It looks wrong to hand out a
+ * name from a Worker that has just been described as untrustworthy. It is not: the
+ * READER verifies, and it cannot verify what it was not sent. The name arrives
+ * beside the quorum bundle, the canonical hash and the directory epoch, and
+ * apps/web/src/lib/accountability-verify.ts re-derives the hash from the fields it
+ * is about to render and re-checks m-of-n against its own PINNED reviewer
+ * directory before showing it. With that directory empty — which is today — every
+ * record renders institutionally and no name is ever displayed.
+ *
+ * So a compelled Worker serving a fabricated name achieves nothing: it cannot
+ * produce the signatures, because the reviewer secret keys are generated offline
+ * and never enter the repo, CI, or Cloudflare.
+ *
+ * PUBLISHED ROWS ONLY. Not a filter for tidiness: migration 0022 CHECKs that an
+ * individual identifier can exist ONLY in a PUBLISHED row, so a query that
+ * included other states could not return a name even if it tried. The WHERE and
+ * the CHECK say the same thing, and the CHECK is the one that survives a compelled
+ * edit to this file.
+ */
+app.get('/api/accountability/records', async (c) => {
+	const headers = { 'cache-control': 'public, max-age=300' };
+	if (!(await flagEnabled(c.env.FLAGS, 'accountability_records')))
+		return c.json({ published: false, records: [] }, 200, headers);
+
+	try {
+		const { results } = await c.env.DB.prepare(
+			`SELECT id, station_code, unit_code, rank_band, shift_bucket, region_bucket,
+			        incident_ref, documentary_anchor_sha256, official_name, official_badge,
+			        right_of_reply_ref, corroboration_count, directory_epoch,
+			        record_hash, quorum_bundle
+			 FROM accountability_records WHERE status = 'PUBLISHED'`
+		).all();
+		return c.json({ published: true, records: results }, 200, headers);
+	} catch {
+		// Degrade-safe and DISTINGUISHABLE from both of the above, following
+		// /api/help/capacity: a reader must be able to tell "we are not publishing"
+		// from "we could not read" from "there is nothing here".
+		return c.json({ published: true, records: [], stale: true }, 200, {
+			...headers,
+			'cache-control': 'public, max-age=30'
+		});
+	}
+});
+
+/**
  * GET /api/live/zones — the signed zone list, verbatim.
  *
  * The Worker does NOT verify this list and deliberately does not try. It is a
