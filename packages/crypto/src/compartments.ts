@@ -179,7 +179,11 @@ export const SIG_CONTEXT = {
 	/** A reviewer signing off publication of an accountability record. */
 	namingRecord: 'harborage/sig/naming-record/v1',
 	/** The signed list of publishable zone ids for one epoch. */
-	zoneList: 'harborage/sig/zone-list/v1'
+	zoneList: 'harborage/sig/zone-list/v1',
+	/** One lawyer asserting a detainee has not been produced or allowed contact. */
+	legalTrigger: 'harborage/sig/legal-trigger/v1',
+	/** A legal_broker role key countersigning an incommunicado alert. */
+	legalBroker: 'harborage/sig/legal-broker/v1'
 } as const;
 
 export type SigContext = (typeof SIG_CONTEXT)[keyof typeof SIG_CONTEXT];
