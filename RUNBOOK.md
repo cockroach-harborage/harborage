@@ -51,6 +51,23 @@ Per-feature kill switches and heightened-threat mode are **runtime data** flippe
 - **Forced takedown / Cloudflare block:** serve from the non-Cloudflare public mirror; fork-continuity per the open-source governance plan.
 - **Mail broken after a DNS change:** restore from the DNS snapshot taken in bootstrap; Email records carry `prevent_destroy`.
 - **Debugging:** `wrangler tail` (no sensitive data is logged — see `safeLog`, ARCHITECTURE §10.5).
+- **Deploy run stuck at `pending` with zero jobs (observed 2026-07-26):** the
+  `deploy` workflow queued on `main` but GitHub never dispatched its first job, so
+  no environment approval was ever requested and `pending_deployments` stayed
+  empty. Seven consecutive runs behaved this way; earlier the same day deploys
+  approved normally. Ruled out: Actions/API/webhooks all reported operational; the
+  `deploy` concurrency group held no other run; `gh` was authenticated as
+  `cockroach-harborage`, which IS the environment's required reviewer; the repo is
+  public so Actions minutes are not metered. Cancelling and re-triggering by a
+  fresh merge reproduced it every time.
+
+  **This blocks production rollout only — CI, merges and `main` are unaffected, and
+  the deployed site keeps serving the last applied version.** Recovery to try, in
+  order: re-run the workflow from the Actions UI (`Re-run all jobs`); if the group
+  looks wedged, rename `concurrency.group` in `.github/workflows/deploy.yml` in a
+  normal PR, which forces a new group; failing both, open a GitHub support ticket
+  quoting a stuck run id. Do NOT deploy from a laptop to work around it — that is
+  the deprivileged-pipeline rule (ARCHITECTURE §17.3) and it holds here too.
 
 ---
 
