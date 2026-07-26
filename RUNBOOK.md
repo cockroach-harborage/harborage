@@ -61,13 +61,36 @@ Per-feature kill switches and heightened-threat mode are **runtime data** flippe
   public so Actions minutes are not metered. Cancelling and re-triggering by a
   fresh merge reproduced it every time.
 
+  **ISOLATED to the environment gate.** On the *same push at the same second*,
+  `ci` ran to `completed/success` while `deploy` sat at `pending` with zero jobs.
+  The only structural difference between the two workflows is that every `deploy`
+  job declares `environment: production` and no `ci` job declares an environment
+  at all. So Actions, the runner pool, the queue and the concurrency group are all
+  working; what is not working is GitHub's evaluation of the `production`
+  environment's protection rule. The run never reaches `waiting`, which is the
+  state that would mean "asking a reviewer", so no approval is ever requested.
+
+  Also established: `force-cancel` clears a stuck run where plain `cancel` returns
+  HTTP 500 and leaves it wedged. After force-cancelling every non-completed run
+  repo-wide, the very next deploy still hung — so the queue was never the cause.
+
   **This blocks production rollout only — CI, merges and `main` are unaffected, and
-  the deployed site keeps serving the last applied version.** Recovery to try, in
-  order: re-run the workflow from the Actions UI (`Re-run all jobs`); if the group
-  looks wedged, rename `concurrency.group` in `.github/workflows/deploy.yml` in a
-  normal PR, which forces a new group; failing both, open a GitHub support ticket
-  quoting a stuck run id. Do NOT deploy from a laptop to work around it — that is
-  the deprivileged-pipeline rule (ARCHITECTURE §17.3) and it holds here too.
+  the deployed site keeps serving the last applied version.**
+
+  **Next step, and it needs a human because it briefly weakens a production
+  control:** delete and re-add the required reviewer on the `production`
+  environment (Settings → Environments → production), which repairs a protection
+  rule whose record GitHub can no longer evaluate. Re-add the *identical* reviewer.
+  There is a window in between where the environment has no required reviewer, so
+  do it while no deploy is queued, and confirm the rule is back before the next
+  merge. If that does not clear it, open a GitHub support ticket quoting a stuck
+  run id and the `ci`-succeeds/`deploy`-hangs contrast above.
+
+  Do NOT deploy from a laptop to work around it, and do NOT remove
+  `environment: production` from the plan job to "unblock" it. Both break the
+  deprivileged two-token pipeline (ARCHITECTURE §17.3); the second also silently
+  reads every environment-scoped secret as an empty string, so it would fail
+  anyway, after removing the approval gate.
 
 ---
 
