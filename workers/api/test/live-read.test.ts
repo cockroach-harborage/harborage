@@ -410,3 +410,135 @@ describe('GET /api/live/zones serves the list, and does not vouch for it', () =>
 		expect(((await res.json()) as { zones: unknown[] }).zones).toHaveLength(1);
 	});
 });
+
+describe('GET /api/accountability/records', () => {
+	function acctDb(rows: unknown[] | 'throws') {
+		return {
+			prepare: () => ({
+				all: async () => {
+					if (rows === 'throws') throw new Error('d1 unavailable');
+					return { results: rows };
+				},
+				bind: () => ({ first: async () => null })
+			})
+		};
+	}
+
+	const ROW = {
+		id: 'acct_1',
+		station_code: 'PS-DL-0042',
+		unit_code: null,
+		rank_band: 'inspector_band',
+		shift_bucket: 'night',
+		region_bucket: 'IN-DL',
+		incident_ref: 'inc_1',
+		documentary_anchor_sha256: 'c'.repeat(64),
+		official_name: 'Someone',
+		official_badge: 'B-1',
+		right_of_reply_ref: 'ror_1',
+		corroboration_count: 4,
+		directory_epoch: 5,
+		record_hash: 'a'.repeat(64),
+		quorum_bundle: '[]'
+	};
+
+	/** The flag is off today, and off is not a claim that there are no records. */
+	it('says not published while the flag is off, and reads nothing', async () => {
+		let queried = false;
+		const res = await get('/api/accountability/records', {
+			FLAGS: only(),
+			RATE_LIMIT: rateLimitClosed,
+			DB: {
+				prepare: () => {
+					queried = true;
+					return { all: async () => ({ results: [] }) };
+				}
+			}
+		});
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ published: false, records: [] });
+		expect(queried, 'flag-off must not touch D1').toBe(false);
+	});
+
+	/**
+	 * PUBLISHED only. Belt to migration 0022's braces: the CHECK already makes an
+	 * individual identifier impossible outside a PUBLISHED row, so this filter and
+	 * that constraint say the same thing — and the CHECK is the half that survives a
+	 * compelled edit to the Worker.
+	 */
+	it('asks only for published rows', async () => {
+		let sql = '';
+		await get('/api/accountability/records', {
+			FLAGS: only('accountability_records'),
+			RATE_LIMIT: rateLimitClosed,
+			DB: {
+				prepare: (q: string) => {
+					sql = q;
+					return { all: async () => ({ results: [] }) };
+				}
+			}
+		});
+		expect(sql).toMatch(/WHERE\s+status\s*=\s*'PUBLISHED'/i);
+	});
+
+	/**
+	 * The name IS served, and that is the design: the reader verifies, and it cannot
+	 * verify what it was not sent. The bundle, the canonical hash and the directory
+	 * epoch travel with it so the device can re-derive and re-check.
+	 */
+	it('serves the identifier together with everything needed to check it', async () => {
+		const res = await get('/api/accountability/records', {
+			FLAGS: only('accountability_records'),
+			RATE_LIMIT: rateLimitClosed,
+			DB: acctDb([ROW])
+		});
+		const body = (await res.json()) as { records: Record<string, unknown>[] };
+		const r = body.records[0] ?? {};
+		for (const k of ['official_name', 'record_hash', 'quorum_bundle', 'directory_epoch'])
+			expect(Object.keys(r), k).toContain(k);
+	});
+
+	/** No private-life column can be served, because none is selected. */
+	it('selects no private-life column', async () => {
+		let sql = '';
+		await get('/api/accountability/records', {
+			FLAGS: only('accountability_records'),
+			RATE_LIMIT: rateLimitClosed,
+			DB: {
+				prepare: (q: string) => {
+					sql = q;
+					return { all: async () => ({ results: [] }) };
+				}
+			}
+		});
+		expect(sql).not.toMatch(/home|family|address|phone|personal|social|photo|plate/i);
+		expect(sql).not.toMatch(/SELECT\s+\*/i);
+	});
+
+	/** Three distinguishable shapes, as everywhere else. */
+	it('keeps not-published, could-not-read and nothing-here distinguishable', async () => {
+		const off = await (
+			await get('/api/accountability/records', { FLAGS: only(), RATE_LIMIT: rateLimitClosed })
+		).json();
+		const broken = await (
+			await get('/api/accountability/records', {
+				FLAGS: only('accountability_records'),
+				RATE_LIMIT: rateLimitClosed,
+				DB: acctDb('throws')
+			})
+		).json();
+		const empty = await (
+			await get('/api/accountability/records', {
+				FLAGS: only('accountability_records'),
+				RATE_LIMIT: rateLimitClosed,
+				DB: acctDb([])
+			})
+		).json();
+		expect(off).toEqual({ published: false, records: [] });
+		expect(broken).toEqual({ published: true, records: [], stale: true });
+		expect(empty).toEqual({ published: true, records: [] });
+		expect(new Set([JSON.stringify(off), JSON.stringify(broken), JSON.stringify(empty)]).size).toBe(
+			3
+		);
+	});
+});
