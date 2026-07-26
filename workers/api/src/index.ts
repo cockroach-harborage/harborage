@@ -16,6 +16,10 @@ export { CustodyChain } from './do/CustodyChain.ts';
 export { Broker } from './do/Broker.ts';
 export { Mailbox } from './do/Mailbox.ts';
 export { LiveBoard } from './do/LiveBoard.ts';
+// Exported so the runtime can instantiate the class. NO ROUTE reaches it: the
+// lawyer poll is a later PR and detainee_intake is LOCKED with no FLAG_NAMES
+// entry, so no Worker code that consults it typechecks.
+export { DeadlineTimer } from './do/DeadlineTimer.ts';
 
 export default {
 	fetch: (req: Request, env: ApiEnv, ctx: ExecutionContext) => app.fetch(req, env, ctx),

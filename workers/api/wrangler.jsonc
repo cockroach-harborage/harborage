@@ -22,7 +22,8 @@
 			{ "name": "CUSTODY_CHAIN", "class_name": "CustodyChain" },
 			{ "name": "BROKER", "class_name": "Broker" },
 			{ "name": "MAILBOX", "class_name": "Mailbox" },
-			{ "name": "LIVE_BOARD", "class_name": "LiveBoard" }
+			{ "name": "LIVE_BOARD", "class_name": "LiveBoard" },
+			{ "name": "DEADLINE_TIMER", "class_name": "DeadlineTimer" }
 		]
 	},
 	// SQLite-backed (mandatory for new namespaces, 2026-07-09) but kept wholly
@@ -48,7 +49,12 @@
 		// mandated publication delay is 60 to 180, so a socket-based board can lose
 		// a hazard before it is publishable. Reporter heartbeats and an in-flight
 		// long poll are what keep it resident.
-		{ "tag": "v6", "new_sqlite_classes": ["LiveBoard"] }
+		{ "tag": "v6", "new_sqlite_classes": ["LiveBoard"] },
+		// DeadlineTimer is DURABLE on purpose: it exists to outlive a lawyer's phone
+		// being seized, lost or dead, which is the only thing it buys over an on-device
+		// calendar. It holds hours, never timestamps — an Article 22 deadline stored to
+		// the second is an arrest timestamp, and PITR keeps it 30 days regardless.
+		{ "tag": "v7", "new_sqlite_classes": ["DeadlineTimer"] }
 	],
 	// The Turnstile sitekey is PUBLIC (it is embedded in the page). It travels as
 	// a var so GET /api/intake/status can hand it to the client alongside the

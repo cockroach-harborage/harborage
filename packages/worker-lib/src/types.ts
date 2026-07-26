@@ -74,6 +74,12 @@ export interface ApiEnv extends FlagBindings {
 	 * different token per shard and the union inflates past the density floor.
 	 */
 	LIVE_BOARD: DurableObjectNamespace;
+	/**
+	 * Legal-deadline reminders (§8.3). M5, and unreachable at rest: detainee_intake
+	 * is LOCKED with no FLAG_NAMES entry, so no Worker code that consults it
+	 * typechecks. Holds hours and opaque hashes, never a matter.
+	 */
+	DEADLINE_TIMER: DurableObjectNamespace;
 	MODERATION_BULK: Queue;
 	LIFE_SAFETY: Queue;
 	/** Read cache of the signed Key Directory + Revocation List (notice verify). */
