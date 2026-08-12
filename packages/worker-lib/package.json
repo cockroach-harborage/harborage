@@ -28,8 +28,8 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@cloudflare/workers-types": "^5.20260724.1",
-		"jose": "^6.0.0",
+		"@cloudflare/workers-types": "^5.20260804.1",
+		"jose": "^6.2.8",
 		"@harborage/crypto": "workspace:*"
 	},
 	"devDependencies": {
