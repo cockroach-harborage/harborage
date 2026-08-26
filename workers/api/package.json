@@ -10,11 +10,11 @@
 	"dependencies": {
 		"@harborage/crypto": "workspace:*",
 		"@harborage/worker-lib": "workspace:*",
-		"hono": "^4.12.0"
+		"hono": "^4.13.3"
 	},
 	"devDependencies": {
-		"@cloudflare/workers-types": "^5.20260724.1",
-		"vitest": "^4.1.10",
-		"wrangler": "^4.114.0"
+		"@cloudflare/workers-types": "^5.20260819.1",
+		"vitest": "^4.1.11",
+		"wrangler": "^4.124.0"
 	}
 }
