@@ -28,13 +28,13 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@cloudflare/workers-types": "^5.20260724.1",
-		"jose": "^6.0.0",
+		"@cloudflare/workers-types": "^5.20260908.1",
+		"jose": "^6.2.12",
 		"@harborage/crypto": "workspace:*"
 	},
 	"devDependencies": {
 		"vitest": "^4.1.10",
-		"@noble/curves": "^2.2.0",
-		"@scure/base": "^2.2.0"
+		"@noble/curves": "^2.4.0",
+		"@scure/base": "^2.4.0"
 	}
 }
