@@ -17,9 +17,9 @@
 		"format:check": "prettier --check ."
 	},
 	"devDependencies": {
-		"prettier": "^3.6.0",
+		"prettier": "^3.9.9",
 		"prettier-plugin-svelte": "^4.1.1",
 		"typescript": "^6.0.3",
-		"wrangler": "4.114.0"
+		"wrangler": "4.136.3"
 	}
 }
